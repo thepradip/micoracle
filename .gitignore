@@ -1,0 +1,50 @@
+# Secrets — never commit real credentials.
+.env
+.env.local
+.env.*.local
+
+# Local STT/TTS model caches (re-downloaded on demand; large).
+models/
+*.onnx
+*.bin
+*.safetensors
+*.pt
+
+# Audio scratch / test artifacts.
+*.wav
+*.mp3
+*.flac
+
+# Python runtime artifacts.
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+build/
+dist/
+
+# Virtual environments.
+.venv/
+venv/
+env/
+
+# OS cruft.
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor / IDE.
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Claude Code workspace state.
+.claude/
+
+# Local-only docs / previews (not shipped).
+docs/

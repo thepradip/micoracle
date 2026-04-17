@@ -1,0 +1,34 @@
+# Core deps — required on all platforms.
+numpy>=1.24
+sounddevice>=0.4.6
+webrtcvad>=2.0.10
+soundfile>=0.12.0
+
+# ───── STT backend: pick ONE based on your platform/use case ─────
+#
+# macOS + Apple Silicon (fastest local option):
+#     pip install mlx-whisper
+#
+# Cross-platform local (Linux / Windows / Intel Mac):
+#     pip install faster-whisper
+#
+# Cloud (OpenAI Whisper API or Azure OpenAI Whisper):
+#     pip install openai
+
+# ───── TTS backend: pick ONE (status cues only — optional) ─────
+#
+# macOS built-in `say` has zero deps.
+#
+# Cross-platform offline:
+#     pip install pyttsx3
+#
+# Cloud (higher quality):
+#     pip install openai          # OpenAI TTS
+#     pip install requests        # Azure Speech (HTTP)
+
+# ───── Windows dispatch (required on Windows only) ─────
+#
+#     pip install pyperclip pyautogui pywin32 psutil
+
+# ───── Optional faster HuggingFace downloads ─────
+hf-transfer>=0.1.6; platform_system != "Windows"
