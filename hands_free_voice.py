@@ -25,16 +25,14 @@ import queue
 import sys
 import threading
 import time
-from collections import deque
 from pathlib import Path
 
 import numpy as np
-import sounddevice as sd
-import webrtcvad
 
 import platform_adapter as _pa
 import stt as _stt
 import tts as _tts
+from segmenter import VADSegmenter
 
 
 # ──────────────────────────── .env loader ─────────────────────────
@@ -160,6 +158,7 @@ class WakeState:
 
 
 def list_input_devices() -> list[tuple[int, dict]]:
+    import sounddevice as sd
     return [
         (idx, d) for idx, d in enumerate(sd.query_devices())
         if d["max_input_channels"] > 0
@@ -167,6 +166,7 @@ def list_input_devices() -> list[tuple[int, dict]]:
 
 
 def resolve_input_device(device_hint: str) -> int | None:
+    import sounddevice as sd
     devices = list_input_devices()
     if not devices:
         raise RuntimeError(
@@ -331,6 +331,9 @@ def main() -> int:
         print(f"Device error: {exc}", file=sys.stderr)
         return 1
 
+    import sounddevice as sd
+    import webrtcvad
+
     vad = webrtcvad.Vad(VAD_AGGRESSIVENESS)
     audio_q: queue.Queue[np.ndarray] = queue.Queue()
     utterance_q: queue.Queue[np.ndarray] = queue.Queue()
@@ -414,41 +417,21 @@ def main() -> int:
     print("  (non-wake-word speech is ignored)")
     print()
 
-    utterance: list[np.ndarray] = []
-    preroll: deque[np.ndarray] = deque(maxlen=PREROLL_FRAMES)
-    speech_run = 0
-    silence_run = 0
-    in_speech = False
+    segmenter = VADSegmenter(
+        vad=vad,
+        sample_rate=SAMPLE_RATE,
+        preroll_frames=PREROLL_FRAMES,
+        min_speech_frames=MIN_SPEECH_FRAMES,
+        max_silence_frames=MAX_SILENCE_FRAMES,
+        max_utterance_frames=MAX_UTTERANCE_FRAMES,
+    )
 
     with stream:
         while True:
             frame = audio_q.get()
-            preroll.append(frame)
-            try:
-                is_speech = vad.is_speech(frame.tobytes(), SAMPLE_RATE)
-            except Exception:
-                continue
-
-            if in_speech:
-                utterance.append(frame)
-                silence_run = 0 if is_speech else silence_run + 1
-                if (silence_run >= MAX_SILENCE_FRAMES
-                        or len(utterance) >= MAX_UTTERANCE_FRAMES):
-                    pcm = np.concatenate(utterance)
-                    utterance = []
-                    in_speech = False
-                    silence_run = 0
-                    speech_run = 0
-                    utterance_q.put(pcm)
-            else:
-                if is_speech:
-                    speech_run += 1
-                    if speech_run >= MIN_SPEECH_FRAMES:
-                        in_speech = True
-                        utterance = list(preroll)
-                        silence_run = 0
-                else:
-                    speech_run = max(0, speech_run - 1)
+            pcm = segmenter.process_frame(frame)
+            if pcm is not None:
+                utterance_q.put(pcm)
 
 
 def _dispatch(
