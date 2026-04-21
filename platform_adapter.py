@@ -14,6 +14,7 @@ never has to install that platform's deps.
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -126,12 +127,24 @@ class MacAdapter(PlatformAdapter):
 
 
 class LinuxAdapter(PlatformAdapter):
-    """Linux adapter. Supports X11 (xdotool + xclip) fully, Wayland partially.
+    """Linux adapter. Supports X11 (xdotool) fully, Wayland partially.
 
-    On Wayland, frontmost-app detection is compositor-specific and not
-    universally supported; users should pass ``--target-app`` explicitly and
-    focus the target window manually.
+    On X11, paste is implemented with ``xdotool type`` — the text is typed
+    keystroke-by-keystroke into the focused window. The user's clipboard is
+    never touched and xclip is not a dependency. Electron/terminal clipboard
+    stalls that can swallow Ctrl+V are avoided entirely.
+
+    On Wayland, we fall back to clipboard paste via wl-copy + wtype because
+    wtype's character typing doesn't handle modifiers reliably across layouts.
+    The user's clipboard is stashed and restored.
+
+    No programmatic window activation is attempted on either display server:
+    dispatch always targets the currently-focused window. Users click their
+    Codex CLI terminal before speaking.
     """
+
+    #: Milliseconds between keystrokes for ``xdotool type`` (X11 only).
+    xdotool_type_delay_ms: int = 5
 
     supported_apps = {
         "gnome-terminal", "konsole", "xterm", "xfce4-terminal",
@@ -153,12 +166,11 @@ class LinuxAdapter(PlatformAdapter):
                     "`pacman -S wtype wl-clipboard`)."
                 )
         else:
-            missing = [t for t in ("xdotool", "xclip") if not shutil.which(t)]
+            missing = [t for t in ("xdotool",) if not shutil.which(t)]
             if missing:
                 raise RuntimeError(
                     f"X11 dispatch requires: {', '.join(missing)}. "
-                    "Install via your package manager (e.g. "
-                    "`apt install xdotool xclip`)."
+                    "Install via your package manager (e.g. `apt install xdotool`)."
                 )
 
     def get_frontmost_app(self) -> str:
@@ -167,9 +179,6 @@ class LinuxAdapter(PlatformAdapter):
                 "Frontmost-app detection is not supported on Wayland. "
                 "Pass --target-app <name> explicitly and keep that window focused."
             )
-        # xdotool: window title of the active window. Typically "PID<pid>-<window_title>"
-        # or just the window title depending on WM. We return the title as-is;
-        # the user matches it (or a substring) with --target-app.
         proc = subprocess.run(
             ["xdotool", "getactivewindow", "getwindowname"],
             text=True, capture_output=True, check=False,
@@ -181,55 +190,69 @@ class LinuxAdapter(PlatformAdapter):
             raise RuntimeError("Active window has no title; cannot infer app name.")
         return title
 
+    @staticmethod
+    def _prepare_text_for_xdotool_type(text: str) -> str:
+        """Make STT text safe for ``xdotool type`` (newlines → space, strip NUL)."""
+        t = text.replace("\x00", "")
+        t = re.sub(r"[\r\n]+", " ", t)
+        return t.strip()
+
     def paste_and_return(self, text: str, target_app: str) -> None:
-        original = self._read_clipboard()
-        try:
-            self._write_clipboard(text)
-            self._activate_window(target_app)
-            time.sleep(self.focus_delay_secs)
-            if self.display_server == "wayland":
+        # target_app is accepted for interface parity but ignored: dispatch
+        # goes into whichever window the user has focused at call time.
+        del target_app
+        if self.display_server == "wayland":
+            original = self._read_clipboard()
+            try:
+                self._write_clipboard(text)
                 subprocess.run(
                     ["wtype", "-M", "ctrl", "v", "-m", "ctrl"],
                     check=False,
                 )
                 time.sleep(self.paste_delay_secs)
                 subprocess.run(["wtype", "-k", "Return"], check=False)
-            else:
-                subprocess.run(["xdotool", "key", "--clearmodifiers", "ctrl+v"], check=False)
-                time.sleep(self.paste_delay_secs)
-                subprocess.run(["xdotool", "key", "--clearmodifiers", "Return"], check=False)
-            time.sleep(self.submit_delay_secs)
-        finally:
-            self._write_clipboard(original)
+                time.sleep(self.submit_delay_secs)
+            finally:
+                self._write_clipboard(original)
+            return
 
-    def _activate_window(self, target_app: str) -> None:
-        if self.display_server == "wayland":
-            # Generic programmatic focus is blocked by Wayland's security model.
-            # The user must keep the right window focused themselves.
+        prepared = self._prepare_text_for_xdotool_type(text)
+        if not prepared:
             return
-        # X11: find a window whose name matches (substring, case-insensitive)
-        # and activate it.
         proc = subprocess.run(
-            ["xdotool", "search", "--name", target_app],
-            text=True, capture_output=True, check=False,
-        )
-        win_ids = [w for w in proc.stdout.splitlines() if w.strip()]
-        if not win_ids:
-            # Fall back: just use whatever is currently focused.
-            return
-        subprocess.run(
-            ["xdotool", "windowactivate", "--sync", win_ids[0]],
+            [
+                "xdotool",
+                "type",
+                "--clearmodifiers",
+                "--delay",
+                str(self.xdotool_type_delay_ms),
+                "--",
+                prepared,
+            ],
+            text=True,
+            capture_output=True,
             check=False,
         )
+        if proc.returncode != 0:
+            err = (proc.stderr or proc.stdout or "").strip()
+            raise RuntimeError(f"xdotool type failed: {err or proc.returncode}")
+        time.sleep(self.paste_delay_secs)
+        subprocess.run(
+            ["xdotool", "key", "--clearmodifiers", "Return"],
+            check=False,
+        )
+        time.sleep(self.submit_delay_secs)
 
     def _read_clipboard(self) -> str:
-        cmd = ["wl-paste"] if self.display_server == "wayland" else ["xclip", "-selection", "clipboard", "-o"]
-        proc = subprocess.run(cmd, text=True, capture_output=True, check=False)
+        # Wayland-only; X11 types directly and never touches the clipboard.
+        proc = subprocess.run(["wl-paste"], text=True, capture_output=True, check=False)
         return proc.stdout if proc.returncode == 0 else ""
 
     def _write_clipboard(self, text: str) -> None:
-        cmd = ["wl-copy"] if self.display_server == "wayland" else ["xclip", "-selection", "clipboard"]
-        proc = subprocess.run(cmd, input=text, text=True, capture_output=True, check=False)
+        # Wayland-only.
+        proc = subprocess.run(
+            ["wl-copy"], input=text, text=True, capture_output=True, check=False,
+        )
         if proc.returncode != 0:
             raise RuntimeError(f"Clipboard write failed: {proc.stderr.strip()}")
 

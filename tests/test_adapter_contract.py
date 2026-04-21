@@ -133,64 +133,57 @@ class TestLinuxX11AdapterContract:
 
     def test_dispatch_argv_sequence(self, monkeypatch):
         adapter = self._make_adapter(monkeypatch)
-        calls, fake_run = _record_subprocess({
-            "xclip": lambda argv: (
-                MagicMock(returncode=0, stdout="OLD_CLIP", stderr="")
-                if "-o" in argv
-                else MagicMock(returncode=0, stdout="", stderr="")
-            ),
-            "xdotool": lambda argv: (
-                MagicMock(returncode=0, stdout="12345\n67890\n", stderr="")
-                if "search" in argv
-                else MagicMock(returncode=0, stdout="", stderr="")
-            ),
-        })
+        calls, fake_run = _record_subprocess()
         with patch("subprocess.run", fake_run):
             adapter.paste_and_return("hi there", "gnome-terminal")
 
         argvs = _argv_list(calls)
 
-        # 1. Read clipboard via xclip -o.
-        assert ["xclip", "-selection", "clipboard", "-o"] in argvs
-        # 2. Write clipboard via xclip (stdin = payload).
-        xclip_writes = [c for c in calls if c[0] == ["xclip", "-selection", "clipboard"]]
-        assert len(xclip_writes) >= 1
-        # First write carries our payload.
-        assert xclip_writes[0][1]["input"] == "hi there"
-        # 3. xdotool searches for the target window.
-        assert ["xdotool", "search", "--name", "gnome-terminal"] in argvs
-        # 4. xdotool activates the first matching window id.
-        assert any(
-            a[:3] == ["xdotool", "windowactivate", "--sync"] and a[3] == "12345"
-            for a in argvs
-        ), f"windowactivate not called with first search hit. argvs={argvs}"
-        # 5. Paste via xdotool key ctrl+v.
-        assert ["xdotool", "key", "--clearmodifiers", "ctrl+v"] in argvs
-        # 6. Enter via xdotool key Return.
+        # 1. Type the payload directly; no xclip, no clipboard stash.
+        type_calls = [
+            a for a in argvs if a[:3] == ["xdotool", "type", "--clearmodifiers"]
+        ]
+        assert len(type_calls) == 1, f"expected exactly one xdotool type call. argvs={argvs}"
+        assert type_calls[0][-1] == "hi there", "last arg must be the payload"
+        assert "--" in type_calls[0], "payload must be separated by -- to avoid flag parsing"
+        assert "--delay" in type_calls[0]
+        # 2. Enter via xdotool key Return.
         assert ["xdotool", "key", "--clearmodifiers", "Return"] in argvs
-        # 7. Clipboard restore: last xclip write is the old clipboard contents.
-        last_xclip_write = [
-            c for c in calls if c[0] == ["xclip", "-selection", "clipboard"]
-        ][-1]
-        assert last_xclip_write[1]["input"] == "OLD_CLIP"
+        # 3. xclip must NOT be called — X11 path never touches the clipboard.
+        assert not any(a and a[0] == "xclip" for a in argvs)
 
-    def test_no_matching_window_does_not_activate(self, monkeypatch):
+    def test_no_window_activation_attempted(self, monkeypatch):
+        """Paste must target the currently-focused window; no search/activate."""
+        adapter = self._make_adapter(monkeypatch)
+        calls, fake_run = _record_subprocess()
+        with patch("subprocess.run", fake_run):
+            adapter.paste_and_return("x", "some-label")
+
+        argvs = _argv_list(calls)
+        assert not any(a[:2] == ["xdotool", "search"] for a in argvs)
+        assert not any(a[:2] == ["xdotool", "windowactivate"] for a in argvs)
+
+    def test_xdotool_type_failure_raises(self, monkeypatch):
         adapter = self._make_adapter(monkeypatch)
         calls, fake_run = _record_subprocess({
             "xdotool": lambda argv: (
-                MagicMock(returncode=0, stdout="", stderr="")  # empty search
-                if "search" in argv
+                MagicMock(returncode=1, stdout="", stderr="boom")
+                if len(argv) > 1 and argv[1] == "type"
                 else MagicMock(returncode=0, stdout="", stderr="")
             ),
-            "xclip": MagicMock(returncode=0, stdout="", stderr=""),
         })
         with patch("subprocess.run", fake_run):
-            adapter.paste_and_return("x", "nonexistent-app")
+            with pytest.raises(RuntimeError, match="xdotool type failed"):
+                adapter.paste_and_return("hello", "some-label")
 
-        # No windowactivate call should have been made.
-        assert not any(
-            c[0][:2] == ["xdotool", "windowactivate"] for c in calls
-        )
+    def test_empty_text_skips_typing(self, monkeypatch):
+        """Whitespace-only / empty text must not invoke xdotool at all."""
+        adapter = self._make_adapter(monkeypatch)
+        calls, fake_run = _record_subprocess()
+        with patch("subprocess.run", fake_run):
+            adapter.paste_and_return("   \n  ", "some-label")
+
+        assert calls == [], f"expected no subprocess calls for empty input; got {calls}"
 
 
 # ─────────────────────── Linux Wayland ───────────────────────────
