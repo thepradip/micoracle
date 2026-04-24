@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>micoracle - Documentation</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --surface-2: #1f2630;
+      --border: #30363d;
+      --accent: #58a6ff;
+      --accent-2: #3fb950;
+      --warn: #d29922;
+      --danger: #f85149;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --code-bg: #101820;
+      --radius: 8px;
+      --mono: "JetBrains Mono", "Fira Code", "Cascadia Code", ui-monospace, monospace;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 15px;
+      line-height: 1.7;
+    }
+
+    .layout { display: flex; min-height: 100vh; }
+
+    nav {
+      width: 276px;
+      flex-shrink: 0;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      padding: 24px 0;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+    }
+
+    nav .logo {
+      padding: 0 20px 20px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 16px;
+    }
+
+    nav .logo img { width: 100%; max-width: 218px; display: block; }
+    nav .logo p { color: var(--muted); font-size: 12px; margin-top: 10px; }
+
+    nav ul { list-style: none; }
+
+    nav a {
+      display: block;
+      padding: 6px 20px;
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 13px;
+      border-left: 2px solid transparent;
+      transition: color .15s, border-color .15s, background .15s;
+    }
+
+    nav a:hover { color: var(--text); background: rgba(88, 166, 255, .06); }
+    nav a.active { color: var(--accent); border-left-color: var(--accent); }
+
+    .section-label {
+      padding: 14px 20px 4px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    main {
+      flex: 1;
+      max-width: 980px;
+      padding: 48px 52px 80px;
+    }
+
+    h1 { font-size: 2.25rem; line-height: 1.15; margin-bottom: 10px; }
+    h2 {
+      font-size: 1.32rem;
+      margin: 48px 0 16px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    h3 { font-size: 1rem; margin: 24px 0 10px; }
+    p { color: var(--muted); margin-bottom: 12px; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    strong { color: var(--text); }
+    ul, ol { color: var(--muted); padding-left: 20px; margin-bottom: 12px; }
+    li { margin-bottom: 4px; }
+
+    code {
+      font-family: var(--mono);
+      font-size: 12.5px;
+      color: #a5d6ff;
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1px 6px;
+    }
+
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      overflow-x: auto;
+      margin: 12px 0 20px;
+    }
+
+    pre code {
+      display: block;
+      border: 0;
+      background: transparent;
+      padding: 0;
+      font-size: 13px;
+      line-height: 1.62;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13.5px;
+      margin: 12px 0 24px;
+    }
+
+    th {
+      background: var(--surface);
+      color: var(--text);
+      font-weight: 700;
+      text-align: left;
+    }
+
+    th, td {
+      border: 1px solid var(--border);
+      padding: 9px 13px;
+      vertical-align: top;
+    }
+
+    td { color: var(--muted); }
+    tr:hover td { background: rgba(88, 166, 255, .045); }
+
+    .hero {
+      position: relative;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 14% 0%, rgba(88, 166, 255, .20), transparent 32%),
+        radial-gradient(circle at 88% 8%, rgba(63, 185, 80, .16), transparent 30%),
+        linear-gradient(135deg, #161b22 0%, #0d1117 100%);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 34px;
+      margin-bottom: 38px;
+    }
+
+    .hero-mark {
+      width: 330px;
+      max-width: 100%;
+      margin-bottom: 18px;
+    }
+
+    .hero .subtitle {
+      max-width: 720px;
+      color: var(--muted);
+      font-size: 1.05rem;
+    }
+
+    .badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 18px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      border: 1px solid;
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .badge svg { width: 14px; height: 14px; }
+    .badge-blue { background: #0d2340; border-color: #1a4060; color: var(--accent); }
+    .badge-green { background: #1a3323; border-color: #2d5a3d; color: var(--accent-2); }
+    .badge-yellow { background: #2d2008; border-color: #5a4010; color: var(--warn); }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(244px, 1fr));
+      gap: 14px;
+      margin: 16px 0 24px;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+
+    .icon-box {
+      width: 36px;
+      height: 36px;
+      display: grid;
+      place-items: center;
+      border-radius: 8px;
+      flex: 0 0 auto;
+    }
+
+    .icon-box svg { width: 21px; height: 21px; }
+    .icon-blue { background: #0d2340; color: var(--accent); }
+    .icon-green { background: #1a3323; color: var(--accent-2); }
+    .icon-yellow { background: #2d2008; color: var(--warn); }
+    .icon-red { background: #33161a; color: var(--danger); }
+    .card h3 { margin: 0; font-size: 14px; }
+    .card p { margin: 0; font-size: 12.5px; }
+
+    .callout {
+      border-left: 3px solid;
+      border-radius: 0 var(--radius) var(--radius) 0;
+      padding: 14px 18px;
+      margin: 16px 0 20px;
+      font-size: 13.5px;
+    }
+
+    .callout-info { background: #0d2340; border-color: var(--accent); color: #a0c4f8; }
+    .callout-warn { background: #2d2008; border-color: var(--warn); color: #f0c060; }
+    .callout-success { background: #1a3323; border-color: var(--accent-2); color: #78d8a0; }
+
+    .arch {
+      background: #0f1720;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      margin: 16px 0 24px;
+      overflow-x: auto;
+    }
+
+    .arch svg { min-width: 840px; display: block; width: 100%; height: auto; }
+    .node { fill: #161b22; stroke: #30363d; stroke-width: 1.5; }
+    .node-strong { fill: #0d2340; stroke: #1f6feb; }
+    .node-green { fill: #13261b; stroke: #2d5a3d; }
+    .node-yellow { fill: #2d2008; stroke: #5a4010; }
+    .wire { fill: none; stroke: #58a6ff; stroke-width: 2.5; marker-end: url(#arrow); }
+    .wire-soft { fill: none; stroke: #8b949e; stroke-width: 2; stroke-dasharray: 6 6; marker-end: url(#arrow-muted); }
+    .svg-title { font: 700 15px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #e6edf3; }
+    .svg-body { font: 500 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #8b949e; }
+    .svg-small { font: 700 10px var(--mono); fill: #d29922; letter-spacing: .04em; }
+
+    .env-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+      gap: 12px;
+      margin: 16px 0 24px;
+    }
+
+    .env-item {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 14px;
+    }
+
+    .env-key {
+      color: var(--accent);
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .env-desc { color: var(--muted); font-size: 12px; margin-top: 3px; }
+
+    footer {
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 13px;
+      margin-top: 64px;
+      padding-top: 24px;
+    }
+
+    @media (max-width: 860px) {
+      .layout { display: block; }
+      nav {
+        position: static;
+        width: 100%;
+        height: auto;
+        border-right: 0;
+        border-bottom: 1px solid var(--border);
+      }
+      nav .logo img { max-width: 260px; }
+      main { padding: 28px 20px 56px; max-width: none; }
+      h1 { font-size: 1.8rem; }
+      .hero { padding: 24px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <nav>
+      <div class="logo">
+        <img src="./logo.svg" alt="micoracle logo" />
+        <p>Hands-free voice input for AI coding assistants.</p>
+      </div>
+
+      <div class="section-label">Start</div>
+      <ul>
+        <li><a class="active" href="#overview">Overview</a></li>
+        <li><a href="#features">Features</a></li>
+        <li><a href="#architecture">Architecture</a></li>
+        <li><a href="#install">Install</a></li>
+        <li><a href="#quickstart">Quickstart</a></li>
+      </ul>
+
+      <div class="section-label">Reference</div>
+      <ul>
+        <li><a href="#backends">Backends</a></li>
+        <li><a href="#cli">CLI Reference</a></li>
+        <li><a href="#env">Environment</a></li>
+        <li><a href="#troubleshooting">Troubleshooting</a></li>
+        <li><a href="#privacy">Privacy</a></li>
+        <li><a href="#future-scope">Future Scope</a></li>
+      </ul>
+    </nav>
+
+    <main>
+      <section id="overview" class="hero">
+        <img class="hero-mark" src="./logo.svg" alt="micoracle" />
+        <h1>Voice commands for Claude Code, Codex CLI, OpenCode, and any focused terminal.</h1>
+        <p class="subtitle">
+          micoracle listens continuously, detects wake words, transcribes speech, cleans the prompt,
+          pastes it into the locked target app, presses Enter, and can speak short status cues.
+          It is local-first, cross-platform, and built around swappable STT and TTS backends.
+        </p>
+        <div class="badges">
+          <span class="badge badge-green">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>
+            Local by default
+          </span>
+          <span class="badge badge-blue">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M2 12h20"/></svg>
+            macOS, Linux, Windows
+          </span>
+          <span class="badge badge-yellow">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v18M7 8h10M7 16h10"/></svg>
+            Swappable backends
+          </span>
+        </div>
+      </section>
+
+      <section id="features">
+        <h2>Features</h2>
+        <div class="cards">
+          <article class="card">
+            <div class="card-header">
+              <span class="icon-box icon-blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1M12 18v4M8 22h8"/></svg></span>
+              <h3>Continuous listening</h3>
+            </div>
+            <p>WebRTC VAD, 30 ms frames, and a 300 ms preroll buffer keep wake words from being clipped.</p>
+          </article>
+
+          <article class="card">
+            <div class="card-header">
+              <span class="icon-box icon-green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg></span>
+              <h3>Wake-word gate</h3>
+            </div>
+            <p>Supports "Claude" and "Codex" with fuzzy matching for common speech-to-text mishears.</p>
+          </article>
+
+          <article class="card">
+            <div class="card-header">
+              <span class="icon-box icon-yellow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg></span>
+              <h3>Two-step follow-up</h3>
+            </div>
+            <p>Say the wake word alone, hear "listening", then speak the command within 8 seconds.</p>
+          </article>
+
+          <article class="card">
+            <div class="card-header">
+              <span class="icon-box icon-red"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l16 16M9 9v6a3 3 0 0 0 5 2.2M15 9V5a3 3 0 0 0-5.1-2.1"/><path d="M19 10v1a7 7 0 0 1-1.5 4.3M5 10v1a7 7 0 0 0 7 7v4M8 22h8"/></svg></span>
+              <h3>Noise filtering</h3>
+            </div>
+            <p>Common silence hallucinations such as "thank you" and repeated phrases are silently dropped.</p>
+          </article>
+
+          <article class="card">
+            <div class="card-header">
+              <span class="icon-box icon-blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 3h5v5M8 21H3v-5M21 3l-7 7M3 21l7-7"/></svg></span>
+              <h3>Platform adapters</h3>
+            </div>
+            <p>macOS AppleScript, Linux xdotool/wtype, and Windows pywin32/pyautogui dispatch paths.</p>
+          </article>
+
+          <article class="card">
+            <div class="card-header">
+              <span class="icon-box icon-green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12h6M12 9v6"/><rect x="4" y="4" width="16" height="16" rx="2"/></svg></span>
+              <h3>Clipboard-conscious paste</h3>
+            </div>
+            <p>Clipboard-based dispatch paths restore the previous clipboard content after the prompt is sent.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="architecture">
+        <h2>Architecture</h2>
+        <p>The runtime is a small producer-consumer pipeline. Capture and segmentation stay close to the microphone, while transcription and dispatch run in the worker thread.</p>
+
+        <div class="arch" aria-label="micoracle runtime architecture diagram">
+          <svg viewBox="0 0 920 520" role="img" aria-labelledby="arch-title">
+            <title id="arch-title">micoracle runtime pipeline</title>
+            <defs>
+              <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+                <path d="M1 1 9 5 1 9Z" fill="#58a6ff" />
+              </marker>
+              <marker id="arrow-muted" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+                <path d="M1 1 9 5 1 9Z" fill="#8b949e" />
+              </marker>
+            </defs>
+
+            <rect class="node node-strong" x="30" y="42" width="126" height="74" rx="8"/>
+            <text class="svg-title" x="70" y="76">Mic</text>
+            <text class="svg-body" x="54" y="98">16 kHz PCM</text>
+
+            <rect class="node" x="222" y="42" width="180" height="74" rx="8"/>
+            <text class="svg-title" x="252" y="74">sounddevice</text>
+            <text class="svg-body" x="256" y="97">callback every 30 ms</text>
+
+            <rect class="node node-yellow" x="466" y="42" width="158" height="74" rx="8"/>
+            <text class="svg-title" x="515" y="74">audio_q</text>
+            <text class="svg-body" x="499" y="97">raw PCM frames</text>
+
+            <rect class="node node-green" x="416" y="176" width="260" height="146" rx="8"/>
+            <text class="svg-title" x="502" y="209">VADSegmenter</text>
+            <text class="svg-body" x="456" y="237">WebRTC VAD</text>
+            <text class="svg-body" x="456" y="259">300 ms preroll buffer</text>
+            <text class="svg-body" x="456" y="281">120 ms to lock speech</text>
+            <text class="svg-body" x="456" y="303">840 ms silence or 18 s cap</text>
+
+            <rect class="node node-yellow" x="466" y="382" width="158" height="74" rx="8"/>
+            <text class="svg-title" x="498" y="414">utterance_q</text>
+            <text class="svg-body" x="492" y="437">complete segments</text>
+
+            <rect class="node" x="50" y="174" width="286" height="282" rx="10"/>
+            <rect x="50" y="174" width="286" height="44" rx="10" fill="#0d2340" stroke="#1f6feb"/>
+            <text class="svg-title" x="142" y="202">Worker Thread</text>
+
+            <rect class="node node-strong" x="84" y="244" width="218" height="45" rx="7"/>
+            <text class="svg-title" x="118" y="272">STTBackend.transcribe()</text>
+
+            <rect class="node node-green" x="84" y="318" width="218" height="54" rx="7"/>
+            <text class="svg-title" x="114" y="342">wake-word cleanup</text>
+            <text class="svg-body" x="124" y="361">fuzzy match and noise filter</text>
+
+            <rect class="node node-yellow" x="84" y="402" width="218" height="45" rx="7"/>
+            <text class="svg-title" x="120" y="430">PlatformAdapter.paste()</text>
+
+            <rect class="node node-green" x="704" y="244" width="160" height="74" rx="8"/>
+            <text class="svg-title" x="746" y="276">TTSBackend</text>
+            <text class="svg-body" x="760" y="299">speak()</text>
+
+            <path class="wire" d="M156 79H212"/>
+            <path class="wire" d="M402 79H456"/>
+            <path class="wire" d="M545 116V166"/>
+            <path class="wire" d="M545 322V372"/>
+            <path class="wire" d="M466 419H356C342 419 336 411 336 398V269C336 256 328 266 312 266"/>
+            <path class="wire" d="M193 289V310"/>
+            <path class="wire" d="M193 372V394"/>
+            <path class="wire-soft" d="M302 425H676C696 425 704 414 704 394V318"/>
+            <text class="svg-small" x="210" y="306">raw text</text>
+            <text class="svg-small" x="212" y="392">clean prompt</text>
+          </svg>
+        </div>
+
+        <h3>Module overview</h3>
+        <table>
+          <thead><tr><th>Module</th><th>Responsibility</th></tr></thead>
+          <tbody>
+            <tr><td><code>hands_free_voice.py</code></td><td>Main entry point for capture, VAD wiring, wake-word routing, and dispatch.</td></tr>
+            <tr><td><code>segmenter.py</code></td><td><code>VADSegmenter</code> state machine with preroll, silence cutoff, and hard utterance cap.</td></tr>
+            <tr><td><code>stt.py</code></td><td><code>STTBackend</code> interface, concrete STT backends, config, and auto factory.</td></tr>
+            <tr><td><code>tts.py</code></td><td><code>TTSBackend</code> interface, concrete TTS backends, config, and auto factory.</td></tr>
+            <tr><td><code>platform_adapter.py</code></td><td>OS-specific focus and paste adapters for macOS, Linux, and Windows.</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="install">
+        <h2>Install</h2>
+        <h3>Core dependencies</h3>
+        <pre><code>git clone https://github.com/thepradip/micoracle.git
+cd micoracle
+pip install -r requirements.txt</code></pre>
+
+        <h3>Platform packages</h3>
+        <table>
+          <thead><tr><th>Platform</th><th>Command</th></tr></thead>
+          <tbody>
+            <tr><td>macOS</td><td><code>brew install portaudio</code></td></tr>
+            <tr><td>Linux X11</td><td><code>sudo apt install xdotool portaudio19-dev python3-dev</code></td></tr>
+            <tr><td>Linux Wayland</td><td><code>sudo apt install wtype wl-clipboard portaudio19-dev python3-dev</code></td></tr>
+            <tr><td>Windows</td><td><code>pip install pyperclip pyautogui pywin32 psutil</code></td></tr>
+          </tbody>
+        </table>
+
+        <div class="callout callout-info">
+          Optional STT and TTS packages are imported lazily. Install only the backend packages you plan to use.
+        </div>
+      </section>
+
+      <section id="quickstart">
+        <h2>Quickstart</h2>
+        <pre><code># Focus Claude Code, Codex CLI, OpenCode, or another target terminal first.
+./run_hands_free.sh
+
+# Windows:
+run_hands_free.bat</code></pre>
+
+        <p><strong>One-shot:</strong> say <code>Codex, write a Python hello world</code>. micoracle transcribes the command, pastes it, and presses Enter.</p>
+        <p><strong>Two-step:</strong> say <code>Codex</code>, wait for <code>listening</code>, then speak the prompt within 8 seconds.</p>
+
+        <pre><code># Override backend selection
+./run_hands_free.sh --stt-backend openai --tts-backend openai
+
+# Pin a target app, required for Wayland
+./run_hands_free.sh --target-app gnome-terminal</code></pre>
+      </section>
+
+      <section id="backends">
+        <h2>Backends</h2>
+        <h3>Platform defaults</h3>
+        <table>
+          <thead><tr><th>Platform</th><th>STT default</th><th>TTS default</th><th>Paste method</th></tr></thead>
+          <tbody>
+            <tr><td>macOS Apple Silicon</td><td><code>mlx</code></td><td><code>say</code></td><td>AppleScript</td></tr>
+            <tr><td>macOS Intel</td><td><code>faster</code></td><td><code>say</code></td><td>AppleScript</td></tr>
+            <tr><td>Linux X11</td><td><code>faster</code></td><td><code>pyttsx3</code></td><td>focused window via <code>xdotool type</code></td></tr>
+            <tr><td>Linux Wayland</td><td><code>faster</code></td><td><code>pyttsx3</code></td><td><code>wtype</code> + <code>wl-copy</code></td></tr>
+            <tr><td>Windows 10/11</td><td><code>faster</code></td><td><code>pyttsx3</code></td><td>pywin32 + pyautogui</td></tr>
+          </tbody>
+        </table>
+
+        <h3>STT choices</h3>
+        <table>
+          <thead><tr><th>Backend</th><th>Best for</th><th>Install / configure</th></tr></thead>
+          <tbody>
+            <tr><td><code>mlx</code></td><td>Fast local transcription on Apple Silicon</td><td><code>pip install mlx-whisper</code></td></tr>
+            <tr><td><code>faster</code></td><td>Cross-platform local transcription</td><td><code>pip install faster-whisper</code></td></tr>
+            <tr><td><code>openai</code></td><td>OpenAI cloud Whisper</td><td><code>pip install openai</code> and set <code>OPENAI_API_KEY</code></td></tr>
+            <tr><td><code>azure</code></td><td>Azure OpenAI Whisper deployment</td><td><code>pip install openai</code> and set Azure OpenAI vars</td></tr>
+          </tbody>
+        </table>
+
+        <h3>TTS choices</h3>
+        <table>
+          <thead><tr><th>Backend</th><th>Best for</th><th>Install / configure</th></tr></thead>
+          <tbody>
+            <tr><td><code>say</code></td><td>Built-in macOS status cues</td><td>No extra package</td></tr>
+            <tr><td><code>pyttsx3</code></td><td>Offline Linux / Windows TTS</td><td><code>pip install pyttsx3</code></td></tr>
+            <tr><td><code>openai</code></td><td>OpenAI cloud TTS</td><td><code>pip install openai</code> and set <code>OPENAI_API_KEY</code></td></tr>
+            <tr><td><code>azure</code></td><td>Azure Speech TTS</td><td>Set <code>AZURE_SPEECH_KEY</code> and <code>AZURE_SPEECH_REGION</code></td></tr>
+            <tr><td><code>none</code></td><td>Silent mode</td><td>Use <code>--no-speak</code> or <code>--tts-backend none</code></td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="cli">
+        <h2>CLI Reference</h2>
+        <table>
+          <thead><tr><th>Flag</th><th>Default</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>--device &lt;id|name&gt;</code></td><td>system default mic</td><td>Audio input device, by id or name fragment.</td></tr>
+            <tr><td><code>--list-devices</code></td><td>-</td><td>Print available input devices and exit.</td></tr>
+            <tr><td><code>--target-app &lt;name&gt;</code></td><td>frontmost app at startup</td><td>Lock dispatch to a specific application. Required on Wayland.</td></tr>
+            <tr><td><code>--stt-backend</code></td><td><code>auto</code></td><td><code>auto</code>, <code>mlx</code>, <code>faster</code>, <code>openai</code>, or <code>azure</code>.</td></tr>
+            <tr><td><code>--tts-backend</code></td><td><code>auto</code></td><td><code>auto</code>, <code>say</code>, <code>pyttsx3</code>, <code>openai</code>, <code>azure</code>, or <code>none</code>.</td></tr>
+            <tr><td><code>--no-speak</code></td><td>-</td><td>Alias for <code>--tts-backend none</code>.</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="env">
+        <h2>Environment Variables</h2>
+        <div class="env-grid">
+          <div class="env-item"><div class="env-key">VOICE_AGENT_STT_BACKEND</div><div class="env-desc">Default STT backend.</div></div>
+          <div class="env-item"><div class="env-key">VOICE_AGENT_TTS_BACKEND</div><div class="env-desc">Default TTS backend.</div></div>
+          <div class="env-item"><div class="env-key">VOICE_AGENT_TARGET_APP</div><div class="env-desc">Default dispatch target.</div></div>
+          <div class="env-item"><div class="env-key">VOICE_AGENT_INPUT_DEVICE</div><div class="env-desc">Default microphone device.</div></div>
+          <div class="env-item"><div class="env-key">VOICE_AGENT_MLX_REPO</div><div class="env-desc">MLX Whisper Hugging Face repository.</div></div>
+          <div class="env-item"><div class="env-key">VOICE_AGENT_FASTER_MODEL</div><div class="env-desc">faster-whisper model name.</div></div>
+          <div class="env-item"><div class="env-key">OPENAI_API_KEY</div><div class="env-desc">OpenAI STT and TTS backends.</div></div>
+          <div class="env-item"><div class="env-key">AZURE_OPENAI_ENDPOINT</div><div class="env-desc">Azure OpenAI endpoint.</div></div>
+          <div class="env-item"><div class="env-key">AZURE_OPENAI_KEY</div><div class="env-desc">Azure OpenAI key.</div></div>
+          <div class="env-item"><div class="env-key">AZURE_WHISPER_DEPLOYMENT</div><div class="env-desc">Azure Whisper deployment name.</div></div>
+          <div class="env-item"><div class="env-key">AZURE_SPEECH_KEY</div><div class="env-desc">Azure Speech TTS key.</div></div>
+          <div class="env-item"><div class="env-key">AZURE_SPEECH_REGION</div><div class="env-desc">Azure Speech TTS region.</div></div>
+        </div>
+      </section>
+
+      <section id="troubleshooting">
+        <h2>Troubleshooting</h2>
+        <h3>No input devices shown</h3>
+        <p>Grant microphone permission to the terminal. On macOS, check Privacy &amp; Security -> Microphone. On Linux, verify PulseAudio or PipeWire. On Windows, check Settings -> Privacy -> Microphone.</p>
+
+        <h3>Wake word never fires</h3>
+        <p>Run <code>--list-devices</code>, select the correct microphone, and say "Codex" or "Claude" clearly. Fuzzy matching covers many mishears, but low gain can hide initial consonants.</p>
+
+        <h3>Wayland dispatch errors</h3>
+        <p>Wayland blocks programmatic focus in many compositors. Use <code>--target-app &lt;name&gt;</code> and keep the target window focused manually.</p>
+
+        <h3>macOS keystrokes ignored</h3>
+        <p>Grant Accessibility and Automation permissions to the terminal application running micoracle.</p>
+
+      </section>
+
+      <section id="privacy">
+        <h2>Privacy &amp; Security</h2>
+        <ul>
+          <li><strong>Local backends stay on-device.</strong> MLX Whisper and faster-whisper do not upload audio for inference.</li>
+          <li><strong>Cloud backends upload audio.</strong> OpenAI and Azure require sending captured speech to their services.</li>
+          <li><strong>Clipboard is restored.</strong> micoracle may temporarily overwrite the clipboard on clipboard-based dispatch paths, then restores previous content.</li>
+          <li><strong>No telemetry.</strong> The project does not include analytics or phone-home behavior.</li>
+          <li><strong>Review permissions.</strong> Accessibility and automation permissions allow the app to type into focused windows.</li>
+        </ul>
+      </section>
+
+      <section id="future-scope">
+        <h2>Future Scope</h2>
+        <ul>
+          <li><strong>Additional STT backends:</strong> ElevenLabs Scribe and Google Gemini are candidates for future cloud transcription support.</li>
+          <li><strong>Stronger Linux target locking:</strong> improve X11 and Wayland dispatch so Linux can more closely match macOS and Windows target reactivation.</li>
+          <li><strong>Packaged installers:</strong> provide smoother setup with platform-specific dependency checks.</li>
+          <li><strong>Tray / menu bar control:</strong> add quick controls for pause, resume, backend selection, and target status.</li>
+          <li><strong>Custom wake words:</strong> allow users to configure wake words beyond <code>Claude</code> and <code>Codex</code>.</li>
+        </ul>
+      </section>
+
+      <footer>
+        <p>MIT licensed. Repository: <a href="https://github.com/thepradip/micoracle">github.com/thepradip/micoracle</a></p>
+      </footer>
+    </main>
+  </div>
+</body>
+</html>
