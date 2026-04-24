@@ -1,92 +1,201 @@
+<div align="center">
+
 # micoracle
 
-Hands-free voice input for **Claude Code**, **Codex CLI**, **OpenCode**, and any
-terminal — on **macOS, Linux, and Windows**. OS is auto-detected at launch; STT
-and TTS backends are pluggable (local or cloud).
+**Hands-free voice input for AI coding assistants — on macOS, Linux, and Windows.**
 
-Say *"Codex, refactor this function"* → your speech is captured, transcribed,
-and pasted into the focused terminal with Enter pressed. No push-to-talk, no
-cloud required.
+Say *"Codex, refactor this function"* → your speech is transcribed and pasted into the focused terminal with Enter pressed. No push-to-talk. No cloud required.
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
+[![Python 3.9+](https://img.shields.io/badge/Python-3.9%2B-blue?logo=python&logoColor=white)](https://www.python.org/)
+[![macOS](https://img.shields.io/badge/macOS-✓-brightgreen?logo=apple)](https://www.apple.com/macos/)
+[![Linux](https://img.shields.io/badge/Linux-✓-brightgreen?logo=linux&logoColor=white)](https://www.linux.org/)
+[![Windows](https://img.shields.io/badge/Windows-✓-brightgreen?logo=windows)](https://www.microsoft.com/windows)
+
+</div>
+
+---
+
+## What is micoracle?
+
+micoracle is a cross-platform voice agent that listens continuously in the background. When you say a wake word (`"Claude, ..."` or `"Codex, ..."`), it captures your speech, transcribes it, and types it directly into whatever terminal or app you have focused — pressing Enter automatically.
+
+- Works with **Claude Code**, **Codex CLI**, **OpenCode**, and any terminal
+- Fully **local by default** — no cloud account needed
+- STT and TTS backends are **swappable** via a single flag or env var
+
+---
 
 ## Features
 
-- **Cross-platform** — `platform_adapter.py` auto-selects macOS (AppleScript) /
-  Linux (xdotool on X11, wtype on Wayland) / Windows (pywin32 + pyautogui).
-- **4 STT backends** — MLX Whisper (Apple Silicon), faster-whisper
-  (cross-platform local), OpenAI Whisper API, Azure OpenAI Whisper.
-- **4 TTS backends** — macOS `say`, `pyttsx3` (cross-platform offline), OpenAI
-  TTS, Azure Speech TTS. Or `none` to stay silent.
-- **Continuous listening** with WebRTC VAD + 300 ms preroll buffer (wake words
-  never get chopped by onset detection).
-- **Wake-word gate** — `"Claude, …"` / `"Codex, …"` with fuzzy mishear tolerance.
-- **Two-step follow-up** — say the wake word alone, then the prompt within 8 s.
-- **Silence-hallucination filter** — Whisper's *"Thank you."* / *"Amen."*
-  artifacts are dropped silently.
-- **Locked dispatch target** — frontmost app captured at startup (or pin via
-  `--target-app`), stays fixed regardless of where you click.
-- **Clipboard-safe** — text is pasted via clipboard; your original contents are
-  restored afterwards.
+| | Feature | Detail |
+|---|---|---|
+| 🌐 | **Cross-platform** | Auto-selects macOS (AppleScript), Linux (xdotool / wtype), or Windows (pywin32 + pyautogui) |
+| 🎙️ | **6 STT backends** | MLX Whisper · faster-whisper · OpenAI · Azure · ElevenLabs Scribe · Google Gemini |
+| 🔊 | **4 TTS backends** | macOS `say` · pyttsx3 · OpenAI TTS · Azure Speech TTS |
+| 🔉 | **Continuous listening** | WebRTC VAD + 300 ms preroll buffer — wake words are never clipped at onset |
+| 💬 | **Wake-word gate** | `"Claude, …"` / `"Codex, …"` with fuzzy mishear tolerance |
+| ⏱️ | **Two-step follow-up** | Say wake word alone → you hear *"listening"* → speak prompt within 8 s |
+| 🚫 | **Hallucination filter** | Whisper artifacts like *"Thank you."* / *"Amen."* are silently dropped |
+| 🔒 | **Locked dispatch target** | Frontmost app pinned at startup; stays fixed regardless of where you click |
+| 📋 | **Clipboard-safe** | Text pasted via clipboard; your original content is restored immediately after |
 
-## OS / backend matrix
+---
 
-| Platform | STT default | TTS default | Focus & paste | Notes |
+## Architecture
+
+### Data flow
+
+```
+[ mic ] ──▶ sounddevice callback ──▶ audio_q ──▶ main loop
+                                                          │
+                                                          ▼  (VAD + 300 ms preroll)
+                                                     utterance_q
+                                                          │
+                                                          ▼
+         worker: STTBackend → wake-word filter → PlatformAdapter → TTSBackend
+```
+
+### Detailed pipeline
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                          micoracle runtime                          │
+│                                                                     │
+│  ┌─────────┐    ┌──────────────────┐    ┌─────────────────────┐    │
+│  │   Mic   │───▶│ sounddevice      │───▶│     audio_q         │    │
+│  └─────────┘    │ callback (30 ms) │    │  (raw PCM frames)   │    │
+│                 └──────────────────┘    └─────────┬───────────┘    │
+│                                                   │                 │
+│                                                   ▼                 │
+│                                    ┌──────────────────────────┐    │
+│                                    │     VADSegmenter         │    │
+│                                    │  · WebRTC VAD            │    │
+│                                    │  · 300 ms preroll buffer │    │
+│                                    │  · min 120 ms to lock in │    │
+│                                    │  · 840 ms silence → end  │    │
+│                                    │  · 18 s hard cap         │    │
+│                                    └──────────────┬───────────┘    │
+│                                                   │                 │
+│                                                   ▼                 │
+│                                    ┌──────────────────────────┐    │
+│                                    │     utterance_q          │    │
+│                                    │  (complete PCM segments) │    │
+│                                    └──────────────┬───────────┘    │
+│                                                   │                 │
+│                                                   ▼                 │
+│                              ┌────────────────────────────────┐    │
+│                              │         Worker Thread          │    │
+│                              │                                │    │
+│                              │  ┌────────────────────────┐   │    │
+│                              │  │ STTBackend.transcribe()│   │    │
+│                              │  └──────────┬─────────────┘   │    │
+│                              │             │ raw text         │    │
+│                              │             ▼                  │    │
+│                              │  wake-word check + cleanup     │    │
+│                              │  (fuzzy match · noise filter)  │    │
+│                              │             │ clean prompt     │    │
+│                              │             ▼                  │    │
+│                              │  ┌─────────────────────────┐  │    │
+│                              │  │ PlatformAdapter.paste() │  │    │
+│                              │  └─────────────────────────┘  │    │
+│                              │             │                  │    │
+│                              │             ▼                  │    │
+│                              │  ┌──────────────────────────┐ │    │
+│                              │  │  TTSBackend.speak()      │ │    │
+│                              │  └──────────────────────────┘ │    │
+│                              └────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### Module overview
+
+| Module | Responsibility |
+|---|---|
+| `hands_free_voice.py` | Main entry point — mic capture, VAD wiring, wake-word gate, dispatch loop |
+| `segmenter.py` | `VADSegmenter` — frame-by-frame VAD state machine, preroll ring buffer, emits complete utterances |
+| `stt.py` | `STTBackend` ABC + 6 implementations + `STTConfig` dataclass + OS-aware auto factory |
+| `tts.py` | `TTSBackend` ABC + 4 implementations + `TTSConfig` + auto factory |
+| `platform_adapter.py` | `PlatformAdapter` ABC + `MacAdapter` / `LinuxAdapter` / `WindowsAdapter` + `get_platform_adapter()` factory |
+
+### VAD state machine
+
+```
+IDLE ──(speech frames ≥ 4)──▶ CAPTURING ──(silence ≥ 840 ms OR 18 s cap)──▶ EMIT utterance ──▶ IDLE
+ ▲                                 │
+ └──(speech_run decays on silence)─┘
+```
+
+### Extending — add a new STT backend
+
+All backends follow the same pattern: implement one method, register in the factory.
+
+```python
+class MySTTBackend(STTBackend):
+    name = "mybackend"
+
+    def __init__(self, api_key: str | None = None) -> None:
+        key = api_key or os.environ.get("MY_API_KEY", "").strip()
+        if not key:
+            raise RuntimeError("MY_API_KEY is not set.")
+        self._key = key
+
+    def transcribe(self, pcm_int16: np.ndarray, sample_rate: int) -> str:
+        # convert pcm_int16 → WAV bytes → call API → return text
+        ...
+```
+
+---
+
+## Platform & Backend Matrix
+
+| Platform | STT default | TTS default | Focus & paste method | Notes |
 |---|---|---|---|---|
-| macOS (Apple Silicon) | `mlx` | `say` | AppleScript | Best local latency |
+| macOS (Apple Silicon) | `mlx` | `say` | AppleScript | Lowest local latency |
 | macOS (Intel) | `faster` | `say` | AppleScript | |
 | Linux X11 | `faster` | `pyttsx3` | `xdotool` + `xclip` | Full support |
 | Linux Wayland | `faster` | `pyttsx3` | `wtype` + `wl-copy` | `--target-app` required; auto-focus limited |
-| Windows 10/11 | `faster` | `pyttsx3` | pywin32 + pyautogui | Requires `pip install pyperclip pyautogui pywin32 psutil` |
+| Windows 10/11 | `faster` | `pyttsx3` | pywin32 + pyautogui | Requires extra pip packages |
 
-All defaults can be overridden via `--stt-backend` / `--tts-backend` or
-environment variables.
+All defaults can be overridden via `--stt-backend` / `--tts-backend` or environment variables.
+
+---
 
 ## Install
 
-### Common (all platforms)
+### Step 1 — Core dependencies (all platforms)
 
 ```bash
 git clone https://github.com/thepradip/micoracle.git
 cd micoracle
-python3 -m pip install -r requirements.txt
+pip install -r requirements.txt
 ```
 
-### Pick an STT backend
+### Step 2 — Pick an STT backend
 
-**Apple Silicon Mac (best local):**
-```bash
-pip install mlx-whisper
-```
+| Backend | Best for | Install |
+|---|---|---|
+| `mlx` | Apple Silicon (fastest local) | `pip install mlx-whisper` |
+| `faster` | Cross-platform local | `pip install faster-whisper` |
+| `openai` | Cloud (OpenAI Whisper API) | `pip install openai` |
+| `azure` | Cloud (Azure OpenAI Whisper) | `pip install openai` + set Azure env vars |
+| `elevenlabs` | Cloud (ElevenLabs Scribe) | `pip install requests` |
+| `gemini` | Cloud (Google Gemini) | `pip install google-generativeai` |
 
-**Cross-platform local:**
-```bash
-pip install faster-whisper
-```
+### Step 3 — Pick a TTS backend _(optional)_
 
-**Cloud (OpenAI or Azure):**
-```bash
-pip install openai
-```
+| Backend | Best for | Install |
+|---|---|---|
+| `say` | macOS (built-in) | nothing |
+| `pyttsx3` | Linux / Windows offline | `pip install pyttsx3` + `sudo apt install espeak` |
+| `openai` | Cloud (OpenAI TTS) | `pip install openai` |
+| `azure` | Cloud (Azure Speech) | set Azure Speech env vars |
 
-### Pick a TTS backend (optional — only if you want spoken status cues)
-
-**macOS:** `say` is built-in, no install needed.
-
-**Linux / Windows offline:**
-```bash
-pip install pyttsx3
-# Linux also needs: sudo apt install espeak  (or distro equivalent)
-```
-
-**Cloud:**
-```bash
-pip install openai          # OpenAI TTS
-```
-
-### Platform-specific
+### Step 4 — Platform-specific system packages
 
 **macOS:**
 ```bash
-brew install portaudio      # required by sounddevice
+brew install portaudio
 ```
 
 **Linux (X11):**
@@ -104,120 +213,121 @@ sudo apt install wtype wl-clipboard portaudio19-dev python3-dev
 pip install pyperclip pyautogui pywin32 psutil
 ```
 
-### Configure
+### Step 5 — Configure
 
 ```bash
 cp .env.example .env
-# Edit .env to set API keys (only if using cloud backends), pick backends, etc.
+# Set API keys if using cloud backends; adjust default backends and target app
 ```
+
+---
 
 ## Quickstart
 
 ```bash
-# Focus the app you want to dispatch to (e.g. Claude Code window), then:
+# 1. Focus the app you want to type into (Claude Code, Codex CLI, a terminal…)
+# 2. Launch micoracle:
 ./run_hands_free.sh          # macOS / Linux
 run_hands_free.bat           # Windows
+```
 
-# Override STT/TTS at launch:
-./run_hands_free.sh --stt-backend azure --tts-backend openai
+**One-shot:** *"Codex, write a Python hello world."*
+→ transcribed and pasted with Enter.
 
-# Pin the target app (required on Wayland):
+**Two-step:** *"Codex."* → you hear *"listening"* → say the prompt within 8 s → pasted.
+
+**Override backends at launch:**
+```bash
+./run_hands_free.sh --stt-backend gemini --tts-backend openai
+```
+
+**Pin the target app (required on Wayland):**
+```bash
 ./run_hands_free.sh --target-app gnome-terminal
 ```
 
-Speak:
+---
 
-- **One-shot:** *"Codex, write a Python hello world."* → transcribed + pasted
-  into the focused app.
-- **Two-step:** *"Codex."* → you hear *"listening"* → within 8 s say the
-  prompt → pasted.
-
-## CLI reference
+## CLI Reference
 
 | Flag | Default | Description |
 |---|---|---|
-| `--device <id\|name>` | system default mic | Audio input device. |
-| `--list-devices` | — | Print available input devices and exit. |
-| `--target-app <name>` | frontmost at startup | Lock dispatch target. |
-| `--stt-backend` | `auto` | `auto` / `mlx` / `faster` / `openai` / `azure`. |
-| `--tts-backend` | `auto` | `auto` / `say` / `pyttsx3` / `openai` / `azure` / `none`. |
-| `--no-speak` | — | Alias for `--tts-backend none`. |
+| `--device <id\|name>` | system default mic | Audio input device |
+| `--list-devices` | — | Print available input devices and exit |
+| `--target-app <name>` | frontmost app at startup | Lock the dispatch target |
+| `--stt-backend` | `auto` | `auto` / `mlx` / `faster` / `openai` / `azure` / `elevenlabs` / `gemini` |
+| `--tts-backend` | `auto` | `auto` / `say` / `pyttsx3` / `openai` / `azure` / `none` |
+| `--no-speak` | — | Alias for `--tts-backend none` |
 
-## Environment variables
+---
 
-See [`.env.example`](./.env.example) for the full commented list. Highlights:
+## Environment Variables
+
+See [`.env.example`](./.env.example) for the full commented list.
 
 | Variable | Purpose |
 |---|---|
 | `VOICE_AGENT_STT_BACKEND` | Default STT backend |
 | `VOICE_AGENT_TTS_BACKEND` | Default TTS backend |
 | `VOICE_AGENT_TARGET_APP` | Default dispatch target |
-| `VOICE_AGENT_INPUT_DEVICE` | Default mic |
-| `VOICE_AGENT_MLX_REPO` | MLX Whisper HF repo |
+| `VOICE_AGENT_INPUT_DEVICE` | Default microphone device |
+| `VOICE_AGENT_MLX_REPO` | MLX Whisper HuggingFace repo |
 | `VOICE_AGENT_FASTER_MODEL` | faster-whisper model name |
-| `OPENAI_API_KEY` | For `openai` STT/TTS backends |
-| `AZURE_OPENAI_ENDPOINT` / `AZURE_OPENAI_KEY` / `AZURE_WHISPER_DEPLOYMENT` | For `azure` STT |
-| `AZURE_SPEECH_KEY` / `AZURE_SPEECH_REGION` | For `azure` TTS |
+| `OPENAI_API_KEY` | OpenAI STT / TTS backends |
+| `AZURE_OPENAI_ENDPOINT` | Azure OpenAI Whisper endpoint |
+| `AZURE_OPENAI_KEY` | Azure OpenAI key |
+| `AZURE_WHISPER_DEPLOYMENT` | Azure Whisper deployment name |
+| `AZURE_SPEECH_KEY` | Azure Speech TTS key |
+| `AZURE_SPEECH_REGION` | Azure Speech TTS region |
+| `ELEVENLABS_API_KEY` | ElevenLabs Scribe STT key |
+| `GEMINI_API_KEY` | Google Gemini STT key |
 
-## Architecture
-
-```
-[ mic ] ──▶ sounddevice callback ──▶ audio_q ──▶ main loop
-                                                   │
-                                                   ▼  (VAD + preroll buffer)
-                                               utterance_q
-                                                   │
-                                                   ▼
-                  worker: STTBackend → wake/cleanup → PlatformAdapter → TTSBackend
-```
-
-- `stt.py` — `STTBackend` interface + 4 implementations + OS-aware factory.
-- `tts.py` — `TTSBackend` interface + 4 implementations + factory.
-- `platform_adapter.py` — `PlatformAdapter` interface + `MacAdapter`,
-  `LinuxAdapter`, `WindowsAdapter` + `get_platform_adapter()` factory.
-- `hands_free_voice.py` — mic capture, VAD state machine, wake-state, wiring.
+---
 
 ## Troubleshooting
 
-**No input devices shown.** OS microphone permission for your terminal is
-missing. Grant it (macOS: Privacy & Security → Microphone; Linux: check
-PulseAudio / PipeWire; Windows: Settings → Privacy → Microphone) and relaunch
-the terminal.
+**No input devices shown.**
+Grant microphone permission to your terminal. macOS: *Privacy & Security → Microphone*. Linux: check PulseAudio / PipeWire. Windows: *Settings → Privacy → Microphone*.
 
-**Wake word never fires.** Confirm the right mic via `--list-devices`. Say
-*"Codex"* slowly and clearly — fuzzy matching covers most mishears but a low
-input gain can strip initial consonants.
+**Wake word never fires.**
+Confirm the right mic with `--list-devices`. Say *"Codex"* slowly — fuzzy matching covers mishears, but low mic gain can strip initial consonants.
 
-**`[dispatch error]` on Wayland.** Wayland blocks programmatic window focusing.
-Pass `--target-app` and keep that window focused yourself.
+**`[dispatch error]` on Wayland.**
+Wayland blocks programmatic window focus. Pass `--target-app <name>` and keep that window focused manually.
 
-**Windows: keystrokes sent to the wrong window.** Windows' focus-stealing
-prevention can block `SetForegroundWindow`. Give the target window focus
-manually, or use [AutoHotkey] to nudge focus-stealing permissions.
+**Windows: keystrokes go to the wrong window.**
+Windows' focus-stealing prevention can block `SetForegroundWindow`. Give the target window focus manually before speaking, or use AutoHotkey to relax focus-stealing permissions.
 
-**macOS: keystrokes ignored.** Accessibility + Automation permissions missing
-for the terminal. System Settings → Privacy & Security → Accessibility /
-Automation.
+**macOS: keystrokes ignored.**
+Accessibility + Automation permissions are missing for your terminal. *System Settings → Privacy & Security → Accessibility / Automation*.
 
-## Privacy & security
+**ElevenLabs: 401 Unauthorized.**
+Verify `ELEVENLABS_API_KEY` is set correctly and that the key has STT (Scribe) access enabled in your ElevenLabs dashboard.
 
-- **Local backends keep audio on-device.** MLX Whisper and faster-whisper do
-  not make any network calls at inference time.
-- **Cloud backends upload audio** (OpenAI / Azure). Use only if you're comfortable.
-- **Clipboard** is temporarily overwritten with each dispatch; original
-  contents are restored immediately after.
-- **No telemetry.** No analytics. No phone-home.
-- **Accessibility / Automation permissions are powerful** — the agent types
-  into the focused app and presses Enter. Review the source before granting.
+**Gemini: `ImportError` / `ModuleNotFoundError`.**
+Install the new SDK — `pip install google-genai` (not the older `google-generativeai`).
+
+---
+
+## Privacy & Security
+
+- **Local backends are fully on-device.** MLX Whisper and faster-whisper make zero network calls at inference time.
+- **Cloud backends upload audio** (OpenAI, Azure, ElevenLabs, Gemini). Use only if you are comfortable with that.
+- **Clipboard is temporarily overwritten** with each dispatch; your original contents are restored immediately after.
+- **No telemetry. No analytics. No phone-home.**
+- **Accessibility / Automation permissions are powerful** — the agent types into the focused app and presses Enter. Review the source before granting.
+
+---
 
 ## License
 
 [MIT](./LICENSE) © 2026 Pradip Tivhale
 
+---
+
 ## Acknowledgements
 
-- [MLX Whisper](https://github.com/ml-explore/mlx-examples), [faster-whisper](https://github.com/SYSTRAN/faster-whisper)
-- [py-webrtcvad](https://github.com/wiseman/py-webrtcvad)
-- [sounddevice](https://python-sounddevice.readthedocs.io/)
-- [xdotool](https://github.com/jordansissel/xdotool), [wtype](https://github.com/atx/wtype), [pyautogui](https://pyautogui.readthedocs.io/)
-- [pyttsx3](https://pyttsx3.readthedocs.io/)
+- [MLX Whisper](https://github.com/ml-explore/mlx-examples) · [faster-whisper](https://github.com/SYSTRAN/faster-whisper) · [py-webrtcvad](https://github.com/wiseman/py-webrtcvad)
+- [sounddevice](https://python-sounddevice.readthedocs.io/) · [soundfile](https://python-soundfile.readthedocs.io/)
+- [xdotool](https://github.com/jordansissel/xdotool) · [wtype](https://github.com/atx/wtype) · [pyautogui](https://pyautogui.readthedocs.io/)
+- [pyttsx3](https://pyttsx3.readthedocs.io/) · [ElevenLabs](https://elevenlabs.io/) · [Google Gemini](https://deepmind.google/technologies/gemini/)
