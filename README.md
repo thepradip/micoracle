@@ -73,62 +73,6 @@ The important safety idea: random speech is ignored unless it passes the wake-wo
          worker: STTBackend → filters + wake routing → PlatformAdapter + TTS status cues
 ```
 
-### Detailed pipeline
-
-For contributors, this is the lower-level runtime view:
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                          micoracle runtime                          │
-│                                                                     │
-│  ┌─────────┐    ┌──────────────────┐    ┌─────────────────────┐    │
-│  │   Mic   │───▶│ sounddevice      │───▶│     audio_q         │    │
-│  └─────────┘    │ callback (30 ms) │    │  (raw PCM frames)   │    │
-│                 └──────────────────┘    └─────────┬───────────┘    │
-│                                                   │                 │
-│                                                   ▼                 │
-│                                    ┌──────────────────────────┐    │
-│                                    │     VADSegmenter         │    │
-│                                    │  · WebRTC VAD            │    │
-│                                    │  · 300 ms preroll buffer │    │
-│                                    │  · min 120 ms to lock in │    │
-│                                    │  · 840 ms silence → end  │    │
-│                                    │  · 18 s hard cap         │    │
-│                                    └──────────────┬───────────┘    │
-│                                                   │                 │
-│                                                   ▼                 │
-│                                    ┌──────────────────────────┐    │
-│                                    │     utterance_q          │    │
-│                                    │  (complete PCM segments) │    │
-│                                    └──────────────┬───────────┘    │
-│                                                   │                 │
-│                                                   ▼                 │
-│                              ┌────────────────────────────────┐    │
-│                              │         Worker Thread          │    │
-│                              │                                │    │
-│                              │  ┌────────────────────────┐   │    │
-│                              │  │ STTBackend.transcribe()│   │    │
-│                              │  └──────────┬─────────────┘   │    │
-│                              │             │ raw text         │    │
-│                              │             ▼                  │    │
-│                              │  filters + wake routing        │    │
-│                              │  (fuzzy · hallucination guard) │    │
-│                              │             │ clean prompt     │    │
-│                              │             ▼                  │    │
-│                              │  ┌─────────────────────────┐  │    │
-│                              │  │ PlatformAdapter.        │  │    │
-│                              │  │ paste_and_return()      │  │    │
-│                              │  └─────────────────────────┘  │    │
-│                              │             │                  │    │
-│                              │             ▼                  │    │
-│                              │  ┌──────────────────────────┐ │    │
-│                              │  │ TTSBackend.speak()       │ │    │
-│                              │  │ status cues              │ │    │
-│                              │  └──────────────────────────┘ │    │
-│                              └────────────────────────────────┘    │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
 ### Module overview
 
 | Module | Responsibility |
