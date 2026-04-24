@@ -1,158 +1,99 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" role="img" aria-labelledby="title desc">
-  <title id="title">micoracle voice command flow</title>
-  <desc id="desc">A professional architecture diagram showing how micoracle listens, detects speech, transcribes audio, checks the wake word, pastes the prompt, and speaks status cues.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="960" viewBox="0 0 960 960" role="img" aria-labelledby="title desc">
+  <title id="title">micoracle architecture</title>
+  <desc id="desc">A simple architecture diagram showing speech capture, prompt understanding, and dispatch to the coding assistant.</desc>
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%" stop-color="#0d1117"/>
-      <stop offset="100%" stop-color="#161b22"/>
+      <stop offset="100%" stop-color="#151b23"/>
     </linearGradient>
-    <linearGradient id="blue" x1="0" y1="0" x2="1" y2="1">
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%" stop-color="#58a6ff"/>
       <stop offset="100%" stop-color="#1f6feb"/>
     </linearGradient>
-    <linearGradient id="green" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#56d364"/>
-      <stop offset="100%" stop-color="#238636"/>
-    </linearGradient>
     <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="16" stdDeviation="18" flood-color="#000000" flood-opacity="0.28"/>
+      <feDropShadow dx="0" dy="14" stdDeviation="14" flood-color="#000" flood-opacity="0.22"/>
     </filter>
-    <marker id="arrow" markerWidth="13" markerHeight="13" refX="10" refY="6.5" orient="auto" markerUnits="strokeWidth">
-      <path d="M1 1 L11 6.5 L1 12 Z" fill="#58a6ff"/>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M1 1 L11 6 L1 11 Z" fill="#58a6ff"/>
     </marker>
     <style>
       .bg { fill: url(#bg); }
-      .panel { fill: #0f1720; stroke: #30363d; stroke-width: 2; }
+      .frame { fill: #0f1720; stroke: #30363d; stroke-width: 2; }
       .card { fill: #161b22; stroke: #30363d; stroke-width: 2; filter: url(#shadow); }
-      .soft { fill: #101820; stroke: #263442; stroke-width: 2; }
-      .title { font: 800 38px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #e6edf3; letter-spacing: 0; }
-      .subtitle { font: 500 18px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #8b949e; letter-spacing: 0; }
-      .label { font: 800 22px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #e6edf3; letter-spacing: 0; }
-      .body { font: 500 15px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #8b949e; letter-spacing: 0; }
-      .tiny { font: 700 12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; fill: #a5d6ff; letter-spacing: .08em; }
-      .wire { fill: none; stroke: #58a6ff; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; marker-end: url(#arrow); }
-      .wire-soft { fill: none; stroke: #6e7681; stroke-width: 3; stroke-linecap: round; stroke-dasharray: 8 8; marker-end: url(#arrow); }
-      .icon-line { fill: none; stroke: currentColor; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
+      .note { fill: #101820; stroke: #263442; stroke-width: 2; }
+      .title { font: 800 30px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #e6edf3; }
+      .subtitle { font: 500 15px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #9aa7b4; }
+      .step { font: 800 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #58a6ff; letter-spacing: 1px; }
+      .label { font: 800 23px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #e6edf3; }
+      .body { font: 500 15px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #9aa7b4; }
+      .mono { font: 700 12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; fill: #a5d6ff; letter-spacing: .04em; }
+      .wire { fill: none; stroke: #58a6ff; stroke-width: 4; stroke-linecap: round; marker-end: url(#arrow); }
+      .icon { fill: none; stroke: currentColor; stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; }
       .blue { color: #58a6ff; }
       .green { color: #56d364; }
       .yellow { color: #d29922; }
-      .red { color: #ff7b72; }
-      .chip { fill: #0d2340; stroke: #1f6feb; stroke-width: 1.5; }
-      .chip-text { font: 700 13px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; fill: #a5d6ff; }
     </style>
   </defs>
 
-  <rect class="bg" width="1280" height="720"/>
-  <rect x="36" y="36" width="1208" height="648" rx="24" class="panel"/>
+  <rect class="bg" width="960" height="960"/>
+  <rect class="frame" x="28" y="28" width="904" height="484" rx="24"/>
 
-  <g transform="translate(74 70)">
-    <rect x="0" y="0" width="58" height="58" rx="16" fill="url(#blue)"/>
-    <g transform="translate(16 10)" color="#ffffff">
-      <path class="icon-line" d="M13 0c-6 0-10 5-10 11v11c0 6 4 11 10 11s10-5 10-11V11C23 5 19 0 13 0Z"/>
-      <path class="icon-line" d="M0 21c0 8 6 15 13 15s13-7 13-15M13 36v9M6 45h14"/>
+  <g transform="translate(62 58)">
+    <rect x="0" y="0" width="48" height="48" rx="14" fill="url(#accent)"/>
+    <g transform="translate(15 9)" color="#fff">
+      <path class="icon" d="M9 0c-5 0-9 4-9 9v12c0 5 4 9 9 9s9-4 9-9V9c0-5-4-9-9-9Z"/>
+      <path class="icon" d="M-5 20c0 9 6 16 14 16s14-7 14-16M9 36v8M2 44h14"/>
     </g>
-    <text x="76" y="25" class="title">micoracle architecture</text>
-    <text x="78" y="54" class="subtitle">Speak naturally. micoracle listens, understands the command, and sends it to your coding assistant.</text>
+    <text class="title" x="66" y="22">micoracle architecture</text>
+    <text class="subtitle" x="68" y="46">A wake-word voice pipeline for sending prompts to coding assistants.</text>
   </g>
 
-  <g transform="translate(74 170)">
-    <rect x="0" y="0" width="166" height="132" rx="18" class="card"/>
-    <g class="blue" transform="translate(55 23)">
-      <path class="icon-line" d="M28 4c-10 0-18 8-18 18v18c0 10 8 18 18 18s18-8 18-18V22C46 12 38 4 28 4Z"/>
-      <path class="icon-line" d="M0 38c0 17 13 31 28 31s28-14 28-31M28 69v14M17 83h22"/>
+  <g transform="translate(62 158)">
+    <rect class="card" x="0" y="0" width="240" height="190" rx="18"/>
+    <text class="step" x="26" y="34">01 CAPTURE</text>
+    <circle cx="44" cy="72" r="22" fill="#0d2340" stroke="#1f6feb" stroke-width="2"/>
+    <g class="blue" transform="translate(35 57)">
+      <path class="icon" d="M9 0c-5 0-9 4-9 9v12c0 5 4 9 9 9s9-4 9-9V9c0-5-4-9-9-9Z"/>
+      <path class="icon" d="M-5 20c0 9 6 16 14 16s14-7 14-16"/>
     </g>
-    <text x="50" y="96" class="label">Speak</text>
-    <text x="38" y="119" class="body">Say "Codex..."</text>
+    <text class="label" x="26" y="116">Listen</text>
+    <text class="body" x="26" y="146">Microphone audio is</text>
+    <text class="body" x="26" y="168">captured in 30 ms</text>
   </g>
 
-  <g transform="translate(302 170)">
-    <rect x="0" y="0" width="176" height="132" rx="18" class="card"/>
-    <g class="green" transform="translate(54 26)">
-      <path class="icon-line" d="M6 44c18-28 48-28 66 0"/>
-      <path class="icon-line" d="M18 34c12-16 30-16 42 0"/>
-      <path class="icon-line" d="M31 23c5-5 12-5 17 0"/>
-      <circle cx="39" cy="54" r="6" fill="currentColor"/>
+  <g transform="translate(360 158)">
+    <rect class="card" x="0" y="0" width="240" height="190" rx="18"/>
+    <text class="step" x="26" y="34">02 UNDERSTAND</text>
+    <circle cx="44" cy="72" r="22" fill="#10281a" stroke="#238636" stroke-width="2"/>
+    <g class="green" transform="translate(29 59)">
+      <path class="icon" d="M0 22c9-16 21-24 35-24s26 8 35 24"/>
+      <path class="icon" d="M14 18c6-8 13-12 21-12s15 4 21 12"/>
+      <circle cx="35" cy="34" r="5" fill="currentColor"/>
     </g>
-    <text x="54" y="96" class="label">Listen</text>
-    <text x="34" y="119" class="body">30 ms audio frames</text>
+    <text class="label" x="26" y="116">Transcribe</text>
+    <text class="body" x="26" y="146">VAD finds speech, then</text>
+    <text class="body" x="26" y="168">STT turns it into text.</text>
   </g>
 
-  <g transform="translate(540 170)">
-    <rect x="0" y="0" width="190" height="132" rx="18" class="card"/>
-    <g class="yellow" transform="translate(56 25)">
-      <path class="icon-line" d="M8 18h64v18H8zM8 46h64v18H8z"/>
-      <path class="icon-line" d="M21 27h1M21 55h1M58 27h1M58 55h1"/>
+  <g transform="translate(658 158)">
+    <rect class="card" x="0" y="0" width="240" height="190" rx="18"/>
+    <text class="step" x="26" y="34">03 ACT</text>
+    <circle cx="44" cy="72" r="22" fill="#2d2008" stroke="#8a641c" stroke-width="2"/>
+    <g class="yellow" transform="translate(31 56)">
+      <path class="icon" d="M0 16l11 11 27-27"/>
+      <path class="icon" d="M2 42h38"/>
     </g>
-    <text x="53" y="96" class="label">Segment</text>
-    <text x="42" y="119" class="body">VAD finds phrases</text>
+    <text class="label" x="26" y="116">Send prompt</text>
+    <text class="body" x="26" y="146">Wake-word checks pass,</text>
+    <text class="body" x="26" y="168">then prompt is pasted.</text>
   </g>
 
-  <g transform="translate(792 170)">
-    <rect x="0" y="0" width="176" height="132" rx="18" class="card"/>
-    <g class="blue" transform="translate(52 27)">
-      <path class="icon-line" d="M6 36h12l13-22v62l13-22h18"/>
-      <path class="icon-line" d="M74 18v54"/>
-    </g>
-    <text x="41" y="96" class="label">Transcribe</text>
-    <text x="38" y="119" class="body">Speech to text</text>
-  </g>
+  <path class="wire" d="M302 252H350"/>
+  <path class="wire" d="M600 252H648"/>
 
-  <g transform="translate(1030 170)">
-    <rect x="0" y="0" width="176" height="132" rx="18" class="card"/>
-    <g class="green" transform="translate(57 30)">
-      <path class="icon-line" d="M4 26l18 18L62 4"/>
-      <path class="icon-line" d="M8 64h56"/>
-    </g>
-    <text x="55" y="96" class="label">Verify</text>
-    <text x="35" y="119" class="body">Wake word + filters</text>
-  </g>
-
-  <path class="wire" d="M240 236H292"/>
-  <path class="wire" d="M478 236H530"/>
-  <path class="wire" d="M730 236H782"/>
-  <path class="wire" d="M968 236H1020"/>
-
-  <g transform="translate(160 390)">
-    <rect x="0" y="0" width="430" height="190" rx="20" class="card"/>
-    <text x="30" y="42" class="label">Send the clean prompt</text>
-    <text x="30" y="72" class="body">The command is pasted into the target app and submitted.</text>
-    <g transform="translate(30 98)">
-      <rect x="0" y="0" width="118" height="34" rx="17" class="chip"/>
-      <text x="18" y="22" class="chip-text">macOS</text>
-      <rect x="136" y="0" width="104" height="34" rx="17" class="chip"/>
-      <text x="160" y="22" class="chip-text">Linux</text>
-      <rect x="258" y="0" width="122" height="34" rx="17" class="chip"/>
-      <text x="280" y="22" class="chip-text">Windows</text>
-    </g>
-    <g class="yellow" transform="translate(322 96)">
-      <path class="icon-line" d="M16 4h42l16 16v52H16z"/>
-      <path class="icon-line" d="M58 4v18h16M4 32h38M4 48h38"/>
-    </g>
-  </g>
-
-  <g transform="translate(690 390)">
-    <rect x="0" y="0" width="430" height="190" rx="20" class="card"/>
-    <text x="30" y="42" class="label">Hear short status cues</text>
-    <text x="30" y="72" class="body">micoracle can say "listening", "sent", or "error".</text>
-    <g transform="translate(30 98)">
-      <rect x="0" y="0" width="118" height="34" rx="17" class="chip"/>
-      <text x="23" y="22" class="chip-text">say</text>
-      <rect x="136" y="0" width="118" height="34" rx="17" class="chip"/>
-      <text x="156" y="22" class="chip-text">pyttsx3</text>
-      <rect x="272" y="0" width="118" height="34" rx="17" class="chip"/>
-      <text x="291" y="22" class="chip-text">cloud</text>
-    </g>
-    <g class="green" transform="translate(326 95)">
-      <path class="icon-line" d="M8 38h16l22 18V20L24 38H8z"/>
-      <path class="icon-line" d="M62 27c6 7 6 15 0 22M76 18c12 18 12 38 0 56"/>
-    </g>
-  </g>
-
-  <path class="wire" d="M1118 302V352C1118 372 1102 382 1082 382H400C380 382 374 386 374 390"/>
-  <path class="wire-soft" d="M590 485H680"/>
-
-  <g transform="translate(90 626)">
-    <text class="tiny" x="0" y="0">LOCAL-FIRST:</text>
-    <text class="body" x="94" y="0">MLX Whisper and faster-whisper run on-device. OpenAI and Azure are optional cloud backends.</text>
+  <g transform="translate(62 392)">
+    <rect class="note" x="0" y="0" width="836" height="72" rx="16"/>
+    <text class="mono" x="28" y="30">SAFETY GATE</text>
+    <text class="body" x="28" y="54">Non-wake-word speech is ignored. Optional TTS only speaks short status cues like listening, sent, or error.</text>
   </g>
 </svg>

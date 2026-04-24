@@ -1,10 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1160" height="520" viewBox="0 0 1160 520" role="img" aria-labelledby="title desc">
-  <title id="title">micoracle macOS install commands</title>
-  <desc id="desc">A macOS terminal-style screenshot showing git clone, cd, core dependency install, Homebrew portaudio install, and MLX Whisper install commands.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="760" viewBox="0 0 960 760" role="img" aria-labelledby="title desc">
+  <title id="title">macOS quick install for micoracle</title>
+  <desc id="desc">A Mac terminal style install screenshot showing clone, dependency install, Homebrew portaudio, and mlx-whisper commands.</desc>
   <defs>
     <linearGradient id="page" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%" stop-color="#eef6ff"/>
-      <stop offset="55%" stop-color="#f5fbf7"/>
+      <stop offset="56%" stop-color="#f4fbf7"/>
       <stop offset="100%" stop-color="#fff7ec"/>
     </linearGradient>
     <linearGradient id="terminal" x1="0" y1="0" x2="0" y2="1">
@@ -12,51 +12,55 @@
       <stop offset="100%" stop-color="#0d1117"/>
     </linearGradient>
     <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="24" stdDeviation="22" flood-color="#17324d" flood-opacity="0.24"/>
+      <feDropShadow dx="0" dy="22" stdDeviation="20" flood-color="#17324d" flood-opacity="0.24"/>
     </filter>
     <style>
-      .caption { font: 700 24px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #17324d; letter-spacing: 0; }
-      .sub { font: 500 16px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #617083; letter-spacing: 0; }
+      .caption { font: 800 28px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #17324d; }
+      .sub { font: 500 16px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #617083; }
       .bar { fill: #222b36; }
-      .chrome { font: 600 14px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #9aa7b4; letter-spacing: 0; }
-      .prompt { font: 600 24px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; fill: #56d364; letter-spacing: 0; }
-      .cmd { font: 600 24px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; fill: #e6edf3; letter-spacing: 0; }
-      .comment { font: 600 21px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; fill: #8b949e; letter-spacing: 0; }
-      .path { font: 600 20px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; fill: #a5d6ff; letter-spacing: 0; }
+      .chrome { font: 600 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #9aa7b4; }
+      .prompt { font: 700 18px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; fill: #56d364; }
+      .cmd { font: 700 18px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; fill: #e6edf3; }
+      .comment { font: 700 15px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; fill: #8b949e; }
     </style>
   </defs>
 
-  <rect width="1160" height="520" rx="28" fill="url(#page)"/>
-  <text x="70" y="62" class="caption">macOS quick install</text>
-  <text x="70" y="92" class="sub">Copy these commands into Terminal after installing Python 3.9+.</text>
+  <rect width="960" height="760" rx="28" fill="url(#page)"/>
+  <text x="64" y="62" class="caption">macOS quick install</text>
+  <text x="64" y="92" class="sub">Run these commands in Terminal. Apple Silicon users should include MLX Whisper.</text>
 
-  <g transform="translate(70 124)" filter="url(#shadow)">
-    <rect width="1020" height="330" rx="18" fill="url(#terminal)"/>
-    <rect width="1020" height="46" rx="18" class="bar"/>
-    <path d="M0 28h1020v20H0z" class="bar"/>
+  <g transform="translate(64 126)" filter="url(#shadow)">
+    <rect width="832" height="560" rx="18" fill="url(#terminal)"/>
+    <rect width="832" height="46" rx="18" class="bar"/>
+    <path d="M0 28h832v20H0z" class="bar"/>
     <circle cx="28" cy="23" r="7" fill="#ff5f57"/>
     <circle cx="51" cy="23" r="7" fill="#ffbd2e"/>
     <circle cx="74" cy="23" r="7" fill="#28c840"/>
-    <text x="456" y="29" text-anchor="middle" class="chrome">Terminal</text>
-    <text x="974" y="29" text-anchor="end" class="path">~/micoracle</text>
+    <text x="416" y="29" text-anchor="middle" class="chrome">Terminal</text>
 
-    <g transform="translate(34 86)">
-      <text class="prompt" x="0" y="0">$</text>
-      <text class="cmd" x="31" y="0">git clone https://github.com/thepradip/micoracle.git</text>
+    <g transform="translate(36 86)">
+      <text class="comment" x="0" y="0"># Get the code</text>
+      <text class="prompt" x="0" y="38">$</text>
+      <text class="cmd" x="28" y="38">git clone https://github.com/thepradip/micoracle.git</text>
 
-      <text class="prompt" x="0" y="48">$</text>
-      <text class="cmd" x="31" y="48">cd micoracle</text>
+      <text class="prompt" x="0" y="84">$</text>
+      <text class="cmd" x="28" y="84">cd micoracle</text>
 
-      <text class="prompt" x="0" y="96">$</text>
-      <text class="cmd" x="31" y="96">pip install -r requirements.txt</text>
+      <text class="comment" x="0" y="136"># Install Python packages</text>
+      <text class="prompt" x="0" y="174">$</text>
+      <text class="cmd" x="28" y="174">pip install -r requirements.txt</text>
 
-      <text class="comment" x="0" y="150"># macOS audio dependency</text>
-      <text class="prompt" x="0" y="194">$</text>
-      <text class="cmd" x="31" y="194">brew install portaudio</text>
+      <text class="comment" x="0" y="226"># macOS audio dependency</text>
+      <text class="prompt" x="0" y="264">$</text>
+      <text class="cmd" x="28" y="264">brew install portaudio</text>
 
-      <text class="comment" x="0" y="248"># Apple Silicon default speech-to-text backend</text>
-      <text class="prompt" x="0" y="292">$</text>
-      <text class="cmd" x="31" y="292">pip install mlx-whisper</text>
+      <text class="comment" x="0" y="316"># Apple Silicon default speech-to-text backend</text>
+      <text class="prompt" x="0" y="354">$</text>
+      <text class="cmd" x="28" y="354">pip install mlx-whisper</text>
+
+      <text class="comment" x="0" y="422"># Launch after focusing your target terminal</text>
+      <text class="prompt" x="0" y="460">$</text>
+      <text class="cmd" x="28" y="460">./run_hands_free.sh</text>
     </g>
   </g>
 </svg>

@@ -214,27 +214,44 @@ pip install -r requirements.txt
 
 ### Step 4 — Platform-specific system packages
 
-**macOS:**
+**macOS (Apple Silicon):**
 ```bash
 brew install portaudio
 
-# Apple Silicon default STT backend:
+# Default STT backend on Apple Silicon:
 pip install mlx-whisper
+```
+
+**macOS (Intel):**
+```bash
+brew install portaudio
+
+# Default STT backend on Intel Mac:
+pip install faster-whisper
 ```
 
 **Linux (X11):**
 ```bash
 sudo apt install xdotool portaudio19-dev python3-dev
+
+# Default STT backend on Linux:
+pip install faster-whisper
 ```
 
 **Linux (Wayland):**
 ```bash
 sudo apt install wtype wl-clipboard portaudio19-dev python3-dev
+
+# Default STT backend on Linux:
+pip install faster-whisper
 ```
 
 **Windows:**
 ```bash
 pip install pyperclip pyautogui pywin32 psutil
+
+# Default STT backend on Windows:
+pip install faster-whisper
 ```
 
 ### Step 5 — Configure
@@ -291,18 +308,25 @@ See [`.env.example`](./.env.example) for the full commented list.
 
 | Variable | Purpose |
 |---|---|
-| `VOICE_AGENT_STT_BACKEND` | Default STT backend |
-| `VOICE_AGENT_TTS_BACKEND` | Default TTS backend |
-| `VOICE_AGENT_TARGET_APP` | Default dispatch target |
-| `VOICE_AGENT_INPUT_DEVICE` | Default microphone device |
-| `VOICE_AGENT_MLX_REPO` | MLX Whisper HuggingFace repo |
-| `VOICE_AGENT_FASTER_MODEL` | faster-whisper model name |
+| `VOICE_AGENT_STT_BACKEND` | Default STT backend (`auto` / `mlx` / `faster` / `openai` / `azure`) |
+| `VOICE_AGENT_TTS_BACKEND` | Default TTS backend (`auto` / `say` / `pyttsx3` / `openai` / `azure` / `none`) |
+| `VOICE_AGENT_TARGET_APP` | Default dispatch target app name |
+| `VOICE_AGENT_INPUT_DEVICE` | Default microphone device (name fragment or numeric id) |
+| `VOICE_AGENT_MLX_REPO` | MLX Whisper HuggingFace repo (Apple Silicon) |
+| `VOICE_AGENT_FASTER_MODEL` | faster-whisper model (`tiny.en` / `base.en` / `small.en` / `medium.en` / `large-v3`) |
+| `VOICE_AGENT_FASTER_DEVICE` | faster-whisper device (`auto` / `cpu` / `cuda`) |
+| `VOICE_AGENT_FASTER_COMPUTE` | faster-whisper compute type (`int8` / `float16` / `int8_float16`) |
+| `VOICE_AGENT_TTS_VOICE` | macOS `say` voice name (e.g. `Samantha`) |
+| `VOICE_AGENT_OPENAI_STT_MODEL` | OpenAI STT model name (default: `whisper-1`) |
+| `VOICE_AGENT_OPENAI_TTS_VOICE` | OpenAI TTS voice (`alloy` / `echo` / `fable` / `onyx` / `nova` / `shimmer`) |
+| `VOICE_AGENT_AZURE_TTS_VOICE` | Azure Speech TTS voice (default: `en-US-AriaNeural`) |
+| `HF_HUB_ENABLE_HF_TRANSFER` | Set to `1` for faster HuggingFace model downloads |
 | `OPENAI_API_KEY` | OpenAI STT / TTS backends |
 | `AZURE_OPENAI_ENDPOINT` | Azure OpenAI Whisper endpoint |
 | `AZURE_OPENAI_KEY` | Azure OpenAI key |
-| `AZURE_WHISPER_DEPLOYMENT` | Azure Whisper deployment name |
+| `AZURE_WHISPER_DEPLOYMENT` | Azure Whisper deployment name (default: `whisper`) |
 | `AZURE_SPEECH_KEY` | Azure Speech TTS key |
-| `AZURE_SPEECH_REGION` | Azure Speech TTS region |
+| `AZURE_SPEECH_REGION` | Azure Speech TTS region (e.g. `eastus`) |
 
 ---
 
