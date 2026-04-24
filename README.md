@@ -1,4 +1,4 @@
-# global-voice-code
+# micoracle
 
 Hands-free voice input for **Claude Code**, **Codex CLI**, **OpenCode**, and any
 terminal — on **macOS, Linux, and Windows**. OS is auto-detected at launch; STT
@@ -45,8 +45,8 @@ environment variables.
 ### Common (all platforms)
 
 ```bash
-git clone https://github.com/thepradip/global-voice-code.git
-cd global-voice-code
+git clone https://github.com/thepradip/micoracle.git
+cd micoracle
 python3 -m pip install -r requirements.txt
 ```
 
