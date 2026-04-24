@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 120" width="400" height="120">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0d1117"/>
+      <stop offset="100%" style="stop-color:#161b22"/>
+    </linearGradient>
+    <linearGradient id="micGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#58a6ff"/>
+      <stop offset="100%" style="stop-color:#1f6feb"/>
+    </linearGradient>
+    <linearGradient id="waveGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#58a6ff;stop-opacity:0.3"/>
+      <stop offset="50%" style="stop-color:#58a6ff;stop-opacity:1"/>
+      <stop offset="100%" style="stop-color:#3fb950;stop-opacity:0.3"/>
+    </linearGradient>
+    <linearGradient id="textGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#58a6ff"/>
+      <stop offset="60%" style="stop-color:#a5d6ff"/>
+      <stop offset="100%" style="stop-color:#3fb950"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="2.5" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="softGlow">
+      <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <clipPath id="roundedClip">
+      <rect width="400" height="120" rx="12"/>
+    </clipPath>
+  </defs>
+
+  <!-- Background -->
+  <rect width="400" height="120" rx="12" fill="url(#bgGrad)"/>
+  <rect width="400" height="120" rx="12" fill="none" stroke="#30363d" stroke-width="1"/>
+
+  <!-- Subtle background glow behind mic -->
+  <circle cx="60" cy="60" r="38" fill="#1f6feb" opacity="0.08"/>
+
+  <!-- Mic body -->
+  <rect x="47" y="22" width="26" height="42" rx="13" fill="url(#micGrad)" filter="url(#glow)"/>
+
+  <!-- Mic highlight -->
+  <rect x="50" y="25" width="8" height="20" rx="4" fill="white" opacity="0.15"/>
+
+  <!-- Mic stand arc -->
+  <path d="M 36 62 Q 36 86 60 86 Q 84 86 84 62" fill="none" stroke="url(#micGrad)" stroke-width="3.5" stroke-linecap="round" filter="url(#glow)"/>
+
+  <!-- Mic stand vertical line -->
+  <line x1="60" y1="86" x2="60" y2="98" stroke="#58a6ff" stroke-width="3.5" stroke-linecap="round" filter="url(#glow)"/>
+
+  <!-- Mic base -->
+  <line x1="46" y1="98" x2="74" y2="98" stroke="#58a6ff" stroke-width="3.5" stroke-linecap="round" filter="url(#glow)"/>
+
+  <!-- Sound waves - left -->
+  <path d="M 28 48 Q 22 60 28 72" fill="none" stroke="#58a6ff" stroke-width="2.5" stroke-linecap="round" opacity="0.6"/>
+  <path d="M 20 42 Q 11 60 20 78" fill="none" stroke="#58a6ff" stroke-width="2" stroke-linecap="round" opacity="0.35"/>
+
+  <!-- Sound waves - right -->
+  <path d="M 92 48 Q 98 60 92 72" fill="none" stroke="#3fb950" stroke-width="2.5" stroke-linecap="round" opacity="0.6"/>
+  <path d="M 100 42 Q 109 60 100 78" fill="none" stroke="#3fb950" stroke-width="2" stroke-linecap="round" opacity="0.35"/>
+
+  <!-- Divider -->
+  <line x1="122" y1="24" x2="122" y2="96" stroke="#30363d" stroke-width="1"/>
+
+  <!-- Wordmark: "mic" -->
+  <text x="138" y="72"
+        font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+        font-size="46"
+        font-weight="700"
+        letter-spacing="-1"
+        fill="url(#textGrad)"
+        filter="url(#softGlow)">mic</text>
+
+  <!-- Wordmark: "oracle" in lighter weight -->
+  <text x="222" y="72"
+        font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+        font-size="46"
+        font-weight="300"
+        letter-spacing="-1"
+        fill="#e6edf3">oracle</text>
+
+  <!-- Tagline -->
+  <text x="138" y="94"
+        font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+        font-size="11"
+        font-weight="400"
+        letter-spacing="2.5"
+        fill="#8b949e">HANDS-FREE VOICE FOR AI CODING</text>
+</svg>

@@ -1,8 +1,10 @@
 <div align="center">
 
-# micoracle
+<img src="./logo.svg" alt="micoracle" width="400"/>
+
 
 **Hands-free voice input for AI coding assistants — on macOS, Linux, and Windows.**
+
 
 Say *"Codex, refactor this function"* → your speech is transcribed and pasted into the focused terminal with Enter pressed. No push-to-talk. No cloud required.
 
