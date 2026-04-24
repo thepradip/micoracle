@@ -33,14 +33,14 @@ micoracle is a cross-platform voice agent that listens continuously in the backg
 | | Feature | Detail |
 |---|---|---|
 | 🌐 | **Cross-platform** | Auto-selects macOS (AppleScript), Linux (xdotool / wtype), or Windows (pywin32 + pyautogui) |
-| 🎙️ | **6 STT backends** | MLX Whisper · faster-whisper · OpenAI · Azure · ElevenLabs Scribe · Google Gemini |
+| 🎙️ | **4 STT backends** | MLX Whisper · faster-whisper · OpenAI · Azure |
 | 🔊 | **4 TTS backends** | macOS `say` · pyttsx3 · OpenAI TTS · Azure Speech TTS |
 | 🔉 | **Continuous listening** | WebRTC VAD + 300 ms preroll buffer — wake words are never clipped at onset |
 | 💬 | **Wake-word gate** | `"Claude, …"` / `"Codex, …"` with fuzzy mishear tolerance |
 | ⏱️ | **Two-step follow-up** | Say wake word alone → you hear *"listening"* → speak prompt within 8 s |
 | 🚫 | **Hallucination filter** | Whisper artifacts like *"Thank you."* / *"Amen."* are silently dropped |
-| 🔒 | **Locked dispatch target** | Frontmost app pinned at startup; stays fixed regardless of where you click |
-| 📋 | **Clipboard-safe** | Text pasted via clipboard; your original content is restored immediately after |
+| 🔒 | **Target-aware dispatch** | macOS / Windows can reactivate the startup target; Linux dispatches to the focused window |
+| 📋 | **Clipboard-conscious** | Clipboard paste paths restore your original content immediately after dispatch |
 
 ---
 
@@ -116,7 +116,7 @@ micoracle is a cross-platform voice agent that listens continuously in the backg
 |---|---|
 | `hands_free_voice.py` | Main entry point — mic capture, VAD wiring, wake-word gate, dispatch loop |
 | `segmenter.py` | `VADSegmenter` — frame-by-frame VAD state machine, preroll ring buffer, emits complete utterances |
-| `stt.py` | `STTBackend` ABC + 6 implementations + `STTConfig` dataclass + OS-aware auto factory |
+| `stt.py` | `STTBackend` ABC + 4 implementations + `STTConfig` dataclass + OS-aware auto factory |
 | `tts.py` | `TTSBackend` ABC + 4 implementations + `TTSConfig` + auto factory |
 | `platform_adapter.py` | `PlatformAdapter` ABC + `MacAdapter` / `LinuxAdapter` / `WindowsAdapter` + `get_platform_adapter()` factory |
 
@@ -155,8 +155,8 @@ class MySTTBackend(STTBackend):
 |---|---|---|---|---|
 | macOS (Apple Silicon) | `mlx` | `say` | AppleScript | Lowest local latency |
 | macOS (Intel) | `faster` | `say` | AppleScript | |
-| Linux X11 | `faster` | `pyttsx3` | `xdotool` + `xclip` | Full support |
-| Linux Wayland | `faster` | `pyttsx3` | `wtype` + `wl-copy` | `--target-app` required; auto-focus limited |
+| Linux X11 | `faster` | `pyttsx3` | focused window via `xdotool type` | Keep the target window focused |
+| Linux Wayland | `faster` | `pyttsx3` | focused window via `wtype` + `wl-copy` | `--target-app` required; keep target focused |
 | Windows 10/11 | `faster` | `pyttsx3` | pywin32 + pyautogui | Requires extra pip packages |
 
 All defaults can be overridden via `--stt-backend` / `--tts-backend` or environment variables.
@@ -181,8 +181,6 @@ pip install -r requirements.txt
 | `faster` | Cross-platform local | `pip install faster-whisper` |
 | `openai` | Cloud (OpenAI Whisper API) | `pip install openai` |
 | `azure` | Cloud (Azure OpenAI Whisper) | `pip install openai` + set Azure env vars |
-| `elevenlabs` | Cloud (ElevenLabs Scribe) | `pip install requests` |
-| `gemini` | Cloud (Google Gemini) | `pip install google-generativeai` |
 
 ### Step 3 — Pick a TTS backend _(optional)_
 
@@ -198,11 +196,14 @@ pip install -r requirements.txt
 **macOS:**
 ```bash
 brew install portaudio
+
+# Apple Silicon default STT backend:
+pip install mlx-whisper
 ```
 
 **Linux (X11):**
 ```bash
-sudo apt install xdotool xclip portaudio19-dev python3-dev
+sudo apt install xdotool portaudio19-dev python3-dev
 ```
 
 **Linux (Wayland):**
@@ -240,7 +241,7 @@ run_hands_free.bat           # Windows
 
 **Override backends at launch:**
 ```bash
-./run_hands_free.sh --stt-backend gemini --tts-backend openai
+./run_hands_free.sh --stt-backend openai --tts-backend openai
 ```
 
 **Pin the target app (required on Wayland):**
@@ -257,7 +258,7 @@ run_hands_free.bat           # Windows
 | `--device <id\|name>` | system default mic | Audio input device |
 | `--list-devices` | — | Print available input devices and exit |
 | `--target-app <name>` | frontmost app at startup | Lock the dispatch target |
-| `--stt-backend` | `auto` | `auto` / `mlx` / `faster` / `openai` / `azure` / `elevenlabs` / `gemini` |
+| `--stt-backend` | `auto` | `auto` / `mlx` / `faster` / `openai` / `azure` |
 | `--tts-backend` | `auto` | `auto` / `say` / `pyttsx3` / `openai` / `azure` / `none` |
 | `--no-speak` | — | Alias for `--tts-backend none` |
 
@@ -281,8 +282,6 @@ See [`.env.example`](./.env.example) for the full commented list.
 | `AZURE_WHISPER_DEPLOYMENT` | Azure Whisper deployment name |
 | `AZURE_SPEECH_KEY` | Azure Speech TTS key |
 | `AZURE_SPEECH_REGION` | Azure Speech TTS region |
-| `ELEVENLABS_API_KEY` | ElevenLabs Scribe STT key |
-| `GEMINI_API_KEY` | Google Gemini STT key |
 
 ---
 
@@ -303,21 +302,26 @@ Windows' focus-stealing prevention can block `SetForegroundWindow`. Give the tar
 **macOS: keystrokes ignored.**
 Accessibility + Automation permissions are missing for your terminal. *System Settings → Privacy & Security → Accessibility / Automation*.
 
-**ElevenLabs: 401 Unauthorized.**
-Verify `ELEVENLABS_API_KEY` is set correctly and that the key has STT (Scribe) access enabled in your ElevenLabs dashboard.
-
-**Gemini: `ImportError` / `ModuleNotFoundError`.**
-Install the new SDK — `pip install google-genai` (not the older `google-generativeai`).
-
 ---
 
 ## Privacy & Security
 
 - **Local backends are fully on-device.** MLX Whisper and faster-whisper make zero network calls at inference time.
-- **Cloud backends upload audio** (OpenAI, Azure, ElevenLabs, Gemini). Use only if you are comfortable with that.
-- **Clipboard is temporarily overwritten** with each dispatch; your original contents are restored immediately after.
+- **Cloud backends upload audio** (OpenAI, Azure). Use only if you are comfortable with that.
+- **Clipboard may be temporarily overwritten** on clipboard-based dispatch paths; your original contents are restored immediately after.
 - **No telemetry. No analytics. No phone-home.**
 - **Accessibility / Automation permissions are powerful** — the agent types into the focused app and presses Enter. Review the source before granting.
+
+---
+
+## Future Scope
+
+- **Additional STT backends:** ElevenLabs Scribe and Google Gemini are good candidates for future cloud transcription support.
+- **Stronger Linux target locking:** improve X11 / Wayland dispatch so Linux behavior can more closely match macOS and Windows target reactivation.
+- **Packaged installers:** provide a smoother setup path for macOS, Linux, and Windows with platform-specific dependency checks.
+- **Tray / menu bar control:** add quick controls for pause, resume, backend selection, and target status.
+- **Custom wake words:** allow users to configure wake words beyond `Claude` and `Codex`.
+- **Structured command history:** optionally show recent accepted prompts locally for debugging and auditability.
 
 ---
 
@@ -332,4 +336,4 @@ Install the new SDK — `pip install google-genai` (not the older `google-genera
 - [MLX Whisper](https://github.com/ml-explore/mlx-examples) · [faster-whisper](https://github.com/SYSTRAN/faster-whisper) · [py-webrtcvad](https://github.com/wiseman/py-webrtcvad)
 - [sounddevice](https://python-sounddevice.readthedocs.io/) · [soundfile](https://python-soundfile.readthedocs.io/)
 - [xdotool](https://github.com/jordansissel/xdotool) · [wtype](https://github.com/atx/wtype) · [pyautogui](https://pyautogui.readthedocs.io/)
-- [pyttsx3](https://pyttsx3.readthedocs.io/) · [ElevenLabs](https://elevenlabs.io/) · [Google Gemini](https://deepmind.google/technologies/gemini/)
+- [pyttsx3](https://pyttsx3.readthedocs.io/)
