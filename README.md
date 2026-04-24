@@ -184,6 +184,8 @@ All defaults can be overridden via `--stt-backend` / `--tts-backend` or environm
 
 ## Install
 
+![macOS install commands shown in a terminal](./assets/macos-install-terminal.svg)
+
 ### Step 1 — Core dependencies (all platforms)
 
 ```bash
