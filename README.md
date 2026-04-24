@@ -61,18 +61,6 @@ When micoracle is running, it behaves like a quiet voice remote for your coding 
 
 The important safety idea: random speech is ignored unless it passes the wake-word gate.
 
-### Data flow
-
-```
-[ mic ] ──▶ sounddevice callback ──▶ audio_q ──▶ main loop / VADSegmenter
-                                                          │
-                                                          ▼  (WebRTC VAD + 300 ms preroll)
-                                                     utterance_q
-                                                          │
-                                                          ▼
-         worker: STTBackend → filters + wake routing → PlatformAdapter + TTS status cues
-```
-
 ### Module overview
 
 | Module | Responsibility |
@@ -89,25 +77,6 @@ The important safety idea: random speech is ignored unless it passes the wake-wo
 IDLE ──(speech frames ≥ 4)──▶ CAPTURING ──(silence ≥ 840 ms OR 18 s cap)──▶ EMIT utterance ──▶ IDLE
  ▲                                 │
  └──(speech_run decays on silence)─┘
-```
-
-### Extending — add a new STT backend
-
-All backends follow the same pattern: implement one method, register in the factory.
-
-```python
-class MySTTBackend(STTBackend):
-    name = "mybackend"
-
-    def __init__(self, api_key: str | None = None) -> None:
-        key = api_key or os.environ.get("MY_API_KEY", "").strip()
-        if not key:
-            raise RuntimeError("MY_API_KEY is not set.")
-        self._key = key
-
-    def transcribe(self, pcm_int16: np.ndarray, sample_rate: int) -> str:
-        # convert pcm_int16 → WAV bytes → call API → return text
-        ...
 ```
 
 ---
