@@ -46,19 +46,36 @@ micoracle is a cross-platform voice agent that listens continuously in the backg
 
 ## Architecture
 
+![micoracle architecture](./assets/architecture.svg)
+
+### Simple flow
+
+When micoracle is running, it behaves like a quiet voice remote for your coding assistant:
+
+1. **You speak a command** — for example, `Codex, refactor this function`.
+2. **micoracle listens for real speech** — short background noises are ignored.
+3. **The audio is transcribed** — using a local or cloud STT backend.
+4. **The wake word is checked** — only commands that begin with `Claude` or `Codex` are accepted.
+5. **The clean prompt is sent** — micoracle pastes the command into the target app and presses Enter.
+6. **A short status cue can play** — for example, `listening`, `sent`, or `error`.
+
+The important safety idea: random speech is ignored unless it passes the wake-word gate.
+
 ### Data flow
 
 ```
-[ mic ] ──▶ sounddevice callback ──▶ audio_q ──▶ main loop
+[ mic ] ──▶ sounddevice callback ──▶ audio_q ──▶ main loop / VADSegmenter
                                                           │
-                                                          ▼  (VAD + 300 ms preroll)
+                                                          ▼  (WebRTC VAD + 300 ms preroll)
                                                      utterance_q
                                                           │
                                                           ▼
-         worker: STTBackend → wake-word filter → PlatformAdapter → TTSBackend
+         worker: STTBackend → filters + wake routing → PlatformAdapter + TTS status cues
 ```
 
 ### Detailed pipeline
+
+For contributors, this is the lower-level runtime view:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -94,17 +111,19 @@ micoracle is a cross-platform voice agent that listens continuously in the backg
 │                              │  └──────────┬─────────────┘   │    │
 │                              │             │ raw text         │    │
 │                              │             ▼                  │    │
-│                              │  wake-word check + cleanup     │    │
-│                              │  (fuzzy match · noise filter)  │    │
+│                              │  filters + wake routing        │    │
+│                              │  (fuzzy · hallucination guard) │    │
 │                              │             │ clean prompt     │    │
 │                              │             ▼                  │    │
 │                              │  ┌─────────────────────────┐  │    │
-│                              │  │ PlatformAdapter.paste() │  │    │
+│                              │  │ PlatformAdapter.        │  │    │
+│                              │  │ paste_and_return()      │  │    │
 │                              │  └─────────────────────────┘  │    │
 │                              │             │                  │    │
 │                              │             ▼                  │    │
 │                              │  ┌──────────────────────────┐ │    │
-│                              │  │  TTSBackend.speak()      │ │    │
+│                              │  │ TTSBackend.speak()       │ │    │
+│                              │  │ status cues              │ │    │
 │                              │  └──────────────────────────┘ │    │
 │                              └────────────────────────────────┘    │
 └─────────────────────────────────────────────────────────────────────┘
