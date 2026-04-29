@@ -22,13 +22,7 @@ Say *"Codex, refactor this function"* → your speech is transcribed and pasted 
 
 ## See it in action
 
-<!-- TO ADD VIDEO:
-     1. Go to https://github.com/thepradip/micoracle/issues/new
-     2. Drag MicOracleDemo.mp4 into the comment box
-     3. Copy the CDN URL GitHub gives you (looks like: https://github.com/thepradip/micoracle/assets/...)
-     4. Replace the placeholder URL below with it -->
-
-https://github.com/thepradip/micoracle/assets/REPLACE_WITH_VIDEO_URL/MicOracleDemo.mp4
+![MicOracle Demo](./assets/MicOracleDemo.mp4)
 
 ---
 
