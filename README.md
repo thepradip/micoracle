@@ -22,7 +22,7 @@ Say *"Codex, refactor this function"* → transcribed → pasted into your termi
 
 ## Demo
 
-![MicOracle Demo](./assets/MicOracleDemo.mp4)
+https://github.com/user-attachments/assets/8ab4fc80-8557-4b4e-9149-d6dfad434f70
 
 ---
 
