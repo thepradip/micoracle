@@ -225,7 +225,7 @@ See [`.env.example`](./.env.example) for the full commented list.
 
 ## Architecture
 
-![micoracle architecture](./assets/architecture.svg)
+![micoracle architecture](./assets/architecture_v2.png)
 
 ### How it works
 
