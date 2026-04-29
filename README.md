@@ -2,19 +2,48 @@
 
 <img src="./logo.svg" alt="micoracle" width="400"/>
 
+### Stop typing your AI prompts. Just say them.
 
-**Hands-free voice input for AI coding assistants — on macOS, Linux, and Windows.**
-
+**Hands-free voice input for Claude Code, Codex CLI, and any terminal — on macOS, Linux, and Windows.**
 
 Say *"Codex, refactor this function"* → your speech is transcribed and pasted into the focused terminal with Enter pressed. No push-to-talk. No cloud required.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
-[![Python 3.9+](https://img.shields.io/badge/Python-3.9%2B-blue?logo=python&logoColor=white)](https://www.python.org/)
-[![macOS](https://img.shields.io/badge/macOS-✓-brightgreen?logo=apple)](https://www.apple.com/macos/)
-[![Linux](https://img.shields.io/badge/Linux-✓-brightgreen?logo=linux&logoColor=white)](https://www.linux.org/)
-[![Windows](https://img.shields.io/badge/Windows-✓-brightgreen?logo=windows)](https://www.microsoft.com/windows)
+[![PyPI version](https://img.shields.io/pypi/v/micoracle.svg?style=flat-square)](https://pypi.org/project/micoracle/)
+[![PyPI Downloads](https://img.shields.io/pypi/dm/micoracle?style=flat-square&color=brightgreen)](https://pypi.org/project/micoracle/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](./LICENSE)
+[![Python 3.9+](https://img.shields.io/badge/Python-3.9%2B-blue?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
+[![macOS](https://img.shields.io/badge/macOS-✓-brightgreen?style=flat-square&logo=apple)](https://www.apple.com/macos/)
+[![Linux](https://img.shields.io/badge/Linux-✓-brightgreen?style=flat-square&logo=linux&logoColor=white)](https://www.linux.org/)
+[![Windows](https://img.shields.io/badge/Windows-✓-brightgreen?style=flat-square&logo=windows)](https://www.microsoft.com/windows)
 
 </div>
+
+---
+
+## See it in action
+
+<!-- TO ADD VIDEO:
+     1. Go to https://github.com/thepradip/micoracle/issues/new
+     2. Drag MicOracleDemo.mp4 into the comment box
+     3. Copy the CDN URL GitHub gives you (looks like: https://github.com/thepradip/micoracle/assets/...)
+     4. Replace the placeholder URL below with it -->
+
+https://github.com/thepradip/micoracle/assets/REPLACE_WITH_VIDEO_URL/MicOracleDemo.mp4
+
+---
+
+## Why micoracle?
+
+You're deep in a coding flow with Claude Code or Codex CLI. Every prompt means stopping to type. `micoracle` removes that friction — just speak, and the words appear in your terminal.
+
+| Without micoracle | With micoracle |
+|---|---|
+| Stop → think → type prompt → Enter | Say the prompt. Done. |
+| Push-to-talk or browser extension | Always-on wake-word listener |
+| Cloud-only transcription | 100% offline on Apple Silicon & CPU |
+| Locked to one tool | Works with any terminal app |
+
+Works with **[Claude Code](https://claude.ai/code)** · **[OpenAI Codex CLI](https://github.com/openai/codex)** · **[OpenCode](https://github.com/sst/opencode)** · **iTerm2 · Warp · VS Code terminal · Windows Terminal**
 
 ---
 
@@ -280,6 +309,12 @@ Accessibility + Automation permissions are missing for your terminal. *System Se
 - **Tray / menu bar control:** add quick controls for pause, resume, backend selection, and target status.
 - **Custom wake words:** allow users to configure wake words beyond `Claude` and `Codex`.
 - **Structured command history:** optionally show recent accepted prompts locally for debugging and auditability.
+
+---
+
+## Related searches
+
+*voice input for Claude Code · speech to text for terminal · hands-free coding assistant · talk to Codex CLI · whisper voice paste terminal · dictate to terminal macOS Linux Windows · offline speech recognition CLI · voice control AI coding tool · Claude Code voice · Codex CLI voice input · AI terminal voice control*
 
 ---
 
