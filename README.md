@@ -4,7 +4,7 @@
 
 ### Stop typing your AI prompts. Just say them.
 
-**Hands-free voice input for Claude Code, Codex CLI, and any terminal — macOS · Linux · Windows**
+**Hands-free voice input for Claude Code, Codex CLI, and any terminal macOS · Linux · Windows**
 
 Say *"Codex, refactor this function"* → transcribed → pasted into your terminal → Enter pressed. No push-to-talk. No cloud required.
 
@@ -41,7 +41,6 @@ Then pick your platform and run:
 run_hands_free.bat         # Windows
 ```
 
-Speak *"Codex, write a hello world"* — watch it appear. Done.
 
 > **Need a specific STT backend?** Jump to the [full install guide](#install) below.
 
