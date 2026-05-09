@@ -4,9 +4,9 @@
 
 ### Stop typing your AI prompts. Just say them.
 
-**Hands-free voice input for Claude Code, Codex CLI, and any terminal macOS · Linux · Windows**
+**Hands-free voice input for Claude Code, Codex CLI, and any terminal — macOS · Linux · Windows**
 
-Say *"Codex, refactor this function"* → transcribed → pasted into your terminal → Enter pressed. No push-to-talk. No cloud required.
+Say *"Micoracle, refactor this function"* → transcribed → pasted into your terminal → Enter pressed. No push-to-talk. No cloud required.
 
 [![PyPI version](https://img.shields.io/pypi/v/micoracle.svg?style=flat-square)](https://pypi.org/project/micoracle/)
 [![PyPI Downloads](https://img.shields.io/pypi/dm/micoracle?style=flat-square&color=brightgreen)](https://pypi.org/project/micoracle/)
@@ -41,7 +41,6 @@ Then pick your platform and run:
 run_hands_free.bat         # Windows
 ```
 
-
 > **Need a specific STT backend?** Jump to the [full install guide](#install) below.
 
 ---
@@ -64,26 +63,68 @@ Works with **[Claude Code](https://claude.ai/code)** · **[OpenAI Codex CLI](htt
 | | Feature | Detail |
 |---|---|---|
 | 🌐 | **Cross-platform** | Auto-selects macOS (AppleScript), Linux (xdotool / wtype), or Windows (pywin32 + pyautogui) |
-| 🎙️ | **4 STT backends** | MLX Whisper · faster-whisper · OpenAI · Azure |
+| 🎙️ | **10 STT backends** | MLX Whisper · faster-whisper · OpenAI · Azure · OpenAI Realtime · 60dB · ElevenLabs · Deepgram · AssemblyAI · Groq · Gladia |
 | 🔊 | **4 TTS backends** | macOS `say` · pyttsx3 · OpenAI TTS · Azure Speech TTS |
 | 🔉 | **Continuous listening** | WebRTC VAD + 300 ms preroll buffer — wake words are never clipped at onset |
-| 💬 | **Wake-word gate** | `"Claude, …"` / `"Codex, …"` with fuzzy mishear tolerance |
+| 💬 | **Wake-word gate** | `"Claude, …"` / `"Codex, …"` / `"Micoracle, …"` with fuzzy mishear tolerance |
 | ⏱️ | **Two-step follow-up** | Say wake word alone → hear *"listening"* → speak prompt within 8 s |
+| 💰 | **Cost-guard** | Cloud STT backends activate only after wake-word — continuous listening is always local & free |
 | 🚫 | **Hallucination filter** | Whisper artifacts like *"Thank you."* / *"Amen."* silently dropped |
 | 🔒 | **Target-aware dispatch** | macOS / Windows reactivate the startup target; Linux dispatches to focused window |
 | 📋 | **Clipboard-conscious** | Original clipboard contents restored immediately after each dispatch |
 
 ---
 
+## STT Backends
+
+### Local (free, offline)
+
+| Backend | `--stt-backend` | Best for | Install |
+|---|---|---|---|
+| MLX Whisper | `mlx` | Apple Silicon — fastest on-device | `pip install mlx-whisper` |
+| faster-whisper | `faster` | Cross-platform CPU / CUDA | `pip install faster-whisper` |
+
+### Cloud (post-wake-word only — never billed for continuous listening)
+
+| Backend | `--command-stt-backend` | Latency | Extra install | Key env var |
+|---|---|---|---|---|
+| OpenAI Whisper | `openai` | ~1 s | `pip install openai` | `OPENAI_API_KEY` |
+| Azure Whisper | `azure` | ~1 s | `pip install openai` | `AZURE_OPENAI_KEY` |
+| OpenAI Realtime | `realtime` | ~600 ms | `pip install openai websockets` | `OPENAI_API_KEY` |
+| 60dB.ai | `60db` | ~600 ms | _(none — stdlib only)_ | `SIXTYDB_API_KEY` |
+| ElevenLabs Scribe | `elevenlabs` | ~400 ms | _(none — stdlib only)_ | `ELEVENLABS_API_KEY` |
+| Deepgram Nova-2 | `deepgram` | ~250 ms | _(none — stdlib only)_ | `DEEPGRAM_API_KEY` |
+| Groq Whisper | `groq` | ~200 ms | _(none — stdlib only)_ | `GROQ_API_KEY` |
+| AssemblyAI | `assemblyai` | ~3–5 s | _(none — stdlib only)_ | `ASSEMBLYAI_API_KEY` |
+| Gladia | `gladia` | ~3–5 s | _(none — stdlib only)_ | `GLADIA_API_KEY` |
+
+**Cost-guard rule:** only `mlx`, `faster`, and `auto` are allowed for continuous listening. Any cloud backend set as `--stt-backend` is automatically demoted to `--command-stt-backend` and a local backend handles the mic stream instead.
+
+---
+
+## Wake Words
+
+| Say | Example |
+|---|---|
+| `Claude, …` | *"Claude, explain this function"* |
+| `Codex, …` | *"Codex, refactor to async"* |
+| `Micoracle, …` | *"Micoracle, write a SQL query"* |
+
+All three support **fuzzy mishear tolerance** — common STT splits like *"Mic Oracle"*, *"Mick Oracle"*, *"meek oracle"*, *"Lord"* (for Claude) are all caught automatically.
+
+**Two-step mode:** say the wake word alone → hear *"listening"* → speak your command within 8 s.
+
+---
+
 ## Platform & Backend Matrix
 
-| Platform | STT default | TTS default | Focus & paste method | Notes |
+| Platform | STT (listening) | STT (command) | TTS | Focus & paste |
 |---|---|---|---|---|
-| macOS (Apple Silicon) | `mlx` | `say` | AppleScript | Lowest local latency |
-| macOS (Intel) | `faster` | `say` | AppleScript | |
-| Linux X11 | `faster` | `pyttsx3` | `xdotool type` | Keep target window focused |
-| Linux Wayland | `faster` | `pyttsx3` | `wtype` + `wl-copy` | `--target-app` required |
-| Windows 10/11 | `faster` | `pyttsx3` | pywin32 + pyautogui | Extra pip packages required |
+| macOS Apple Silicon | `mlx` | your choice | `say` | AppleScript |
+| macOS Intel | `faster` | your choice | `say` | AppleScript |
+| Linux X11 | `faster` | your choice | `pyttsx3` | `xdotool type` |
+| Linux Wayland | `faster` | your choice | `pyttsx3` | `wtype` + `wl-copy` |
+| Windows 10/11 | `faster` | your choice | `pyttsx3` | pywin32 + pyautogui |
 
 ---
 
@@ -99,16 +140,45 @@ cd micoracle
 pip install -r requirements.txt
 ```
 
-### Step 2 — Pick an STT backend
+### Step 2 — System packages
 
-| Backend | Best for | Install |
+**macOS:**
+```bash
+brew install portaudio
+```
+
+**Linux (X11):**
+```bash
+sudo apt install xdotool portaudio19-dev python3-dev
+```
+
+**Linux (Wayland):**
+```bash
+sudo apt install wtype wl-clipboard portaudio19-dev python3-dev
+```
+
+### Step 3 — Pick a local STT backend (for continuous listening)
+
+| Platform | Command |
+|---|---|
+| macOS Apple Silicon | `pip install mlx-whisper` |
+| macOS Intel / Linux / Windows | `pip install faster-whisper` |
+
+### Step 4 — Pick a cloud STT backend (for commands, optional)
+
+| Backend | Command | Notes |
 |---|---|---|
-| `mlx` | Apple Silicon (fastest local) | `pip install mlx-whisper` |
-| `faster` | Cross-platform local CPU | `pip install faster-whisper` |
-| `openai` | Cloud (OpenAI Whisper API) | `pip install openai` |
-| `azure` | Cloud (Azure OpenAI Whisper) | `pip install openai` + set Azure env vars |
+| OpenAI Whisper | `pip install openai` | Set `OPENAI_API_KEY` |
+| Azure Whisper | `pip install openai` | Set Azure env vars |
+| OpenAI Realtime | `pip install openai websockets` | Set `OPENAI_API_KEY` |
+| 60dB.ai | _(none)_ | Set `SIXTYDB_API_KEY` |
+| ElevenLabs Scribe | _(none)_ | Set `ELEVENLABS_API_KEY` |
+| Deepgram Nova | _(none)_ | Set `DEEPGRAM_API_KEY` |
+| Groq Whisper | _(none)_ | Set `GROQ_API_KEY` |
+| AssemblyAI | _(none)_ | Set `ASSEMBLYAI_API_KEY` |
+| Gladia | _(none)_ | Set `GLADIA_API_KEY` |
 
-### Step 3 — Pick a TTS backend _(optional)_
+### Step 5 — Pick a TTS backend _(optional, for status cues)_
 
 | Backend | Best for | Install |
 |---|---|---|
@@ -117,42 +187,30 @@ pip install -r requirements.txt
 | `openai` | Cloud (OpenAI TTS) | `pip install openai` |
 | `azure` | Cloud (Azure Speech) | set Azure Speech env vars |
 
-### Step 4 — Platform-specific system packages
+### Step 6 — Windows dispatch packages
 
-**macOS (Apple Silicon):**
 ```bash
-brew install portaudio
-pip install mlx-whisper
+pip install pyperclip pyautogui pywin32 psutil
 ```
 
-**macOS (Intel):**
-```bash
-brew install portaudio
-pip install faster-whisper
-```
-
-**Linux (X11):**
-```bash
-sudo apt install xdotool portaudio19-dev python3-dev
-pip install faster-whisper
-```
-
-**Linux (Wayland):**
-```bash
-sudo apt install wtype wl-clipboard portaudio19-dev python3-dev
-pip install faster-whisper
-```
-
-**Windows:**
-```bash
-pip install pyperclip pyautogui pywin32 psutil faster-whisper
-```
-
-### Step 5 — Configure
+### Step 7 — Configure
 
 ```bash
 cp .env.example .env
-# Set API keys if using cloud backends; adjust default backends and target app
+```
+
+Recommended `.env` for Apple Silicon + 60dB commands:
+```env
+VOICE_AGENT_STT_BACKEND=mlx
+VOICE_AGENT_COMMAND_STT_BACKEND=60db
+SIXTYDB_API_KEY=sk_live_...
+```
+
+Recommended `.env` for Apple Silicon + Groq commands (fastest):
+```env
+VOICE_AGENT_STT_BACKEND=mlx
+VOICE_AGENT_COMMAND_STT_BACKEND=groq
+GROQ_API_KEY=gsk_...
 ```
 
 ---
@@ -165,13 +223,13 @@ cp .env.example .env
 run_hands_free.bat           # Windows
 ```
 
-**One-shot:** *"Codex, write a Python hello world."* → pasted with Enter.
+**One-shot:** *"Micoracle, write a Python hello world."* → pasted with Enter.
 
-**Two-step:** *"Codex."* → hear *"listening"* → say prompt within 8 s → pasted.
+**Two-step:** *"Micoracle."* → hear *"listening"* → say prompt within 8 s → pasted.
 
 **Override backends at launch:**
 ```bash
-./run_hands_free.sh --stt-backend openai --tts-backend openai
+./run_hands_free.sh --stt-backend mlx --command-stt-backend groq
 ```
 
 **Pin to a specific app (required on Wayland):**
@@ -188,7 +246,8 @@ run_hands_free.bat           # Windows
 | `--device <id\|name>` | system default mic | Audio input device |
 | `--list-devices` | — | Print available input devices and exit |
 | `--target-app <name>` | frontmost app at startup | Lock the dispatch target |
-| `--stt-backend` | `auto` | `auto` / `mlx` / `faster` / `openai` / `azure` |
+| `--stt-backend` | `auto` | Local STT for continuous listening: `auto` / `mlx` / `faster` |
+| `--command-stt-backend` | same as `--stt-backend` | Cloud STT for commands after wake-word: `openai` / `azure` / `realtime` / `60db` / `elevenlabs` / `deepgram` / `groq` / `assemblyai` / `gladia` |
 | `--tts-backend` | `auto` | `auto` / `say` / `pyttsx3` / `openai` / `azure` / `none` |
 | `--no-speak` | — | Alias for `--tts-backend none` |
 
@@ -198,41 +257,73 @@ run_hands_free.bat           # Windows
 
 See [`.env.example`](./.env.example) for the full commented list.
 
+### Core
+
 | Variable | Purpose |
 |---|---|
-| `VOICE_AGENT_STT_BACKEND` | Default STT backend (`auto` / `mlx` / `faster` / `openai` / `azure`) |
-| `VOICE_AGENT_TTS_BACKEND` | Default TTS backend (`auto` / `say` / `pyttsx3` / `openai` / `azure` / `none`) |
+| `VOICE_AGENT_STT_BACKEND` | Local STT for listening (`auto` / `mlx` / `faster`) |
+| `VOICE_AGENT_COMMAND_STT_BACKEND` | Cloud STT for commands (`60db` / `groq` / `deepgram` / `elevenlabs` / `assemblyai` / `gladia` / `openai` / `azure` / `realtime`) |
+| `VOICE_AGENT_TTS_BACKEND` | TTS for status cues (`auto` / `say` / `pyttsx3` / `openai` / `azure` / `none`) |
 | `VOICE_AGENT_TARGET_APP` | Default dispatch target app name |
 | `VOICE_AGENT_INPUT_DEVICE` | Default microphone device (name fragment or numeric id) |
+
+### Local STT knobs
+
+| Variable | Purpose |
+|---|---|
 | `VOICE_AGENT_MLX_REPO` | MLX Whisper HuggingFace repo (Apple Silicon) |
 | `VOICE_AGENT_FASTER_MODEL` | faster-whisper model (`tiny.en` / `base.en` / `small.en` / `medium.en` / `large-v3`) |
 | `VOICE_AGENT_FASTER_DEVICE` | faster-whisper device (`auto` / `cpu` / `cuda`) |
 | `VOICE_AGENT_FASTER_COMPUTE` | faster-whisper compute type (`int8` / `float16` / `int8_float16`) |
+
+### Cloud STT keys & options
+
+| Variable | Backend | Purpose |
+|---|---|---|
+| `OPENAI_API_KEY` | `openai` / `realtime` | OpenAI API key |
+| `VOICE_AGENT_OPENAI_STT_MODEL` | `openai` | Model name (default: `whisper-1`) |
+| `VOICE_AGENT_REALTIME_MODEL` | `realtime` | Realtime model (default: `gpt-4o-transcribe`) |
+| `AZURE_OPENAI_ENDPOINT` | `azure` | Azure OpenAI endpoint URL |
+| `AZURE_OPENAI_KEY` | `azure` | Azure OpenAI key |
+| `AZURE_WHISPER_DEPLOYMENT` | `azure` | Deployment name (default: `whisper`) |
+| `SIXTYDB_API_KEY` | `60db` | 60dB.ai API key |
+| `VOICE_AGENT_SIXTYDB_LANGUAGE` | `60db` | Language code (default: `en`) |
+| `ELEVENLABS_API_KEY` | `elevenlabs` | ElevenLabs API key |
+| `VOICE_AGENT_ELEVENLABS_MODEL` | `elevenlabs` | Model (default: `scribe_v2`) |
+| `VOICE_AGENT_ELEVENLABS_LANGUAGE` | `elevenlabs` | Language code (default: `en`) |
+| `DEEPGRAM_API_KEY` | `deepgram` | Deepgram API key |
+| `VOICE_AGENT_DEEPGRAM_MODEL` | `deepgram` | Model (default: `nova-2`) |
+| `VOICE_AGENT_DEEPGRAM_LANGUAGE` | `deepgram` | Language code (default: `en`) |
+| `ASSEMBLYAI_API_KEY` | `assemblyai` | AssemblyAI API key |
+| `VOICE_AGENT_ASSEMBLYAI_LANGUAGE` | `assemblyai` | Language code (default: `en`) |
+| `GROQ_API_KEY` | `groq` | Groq API key |
+| `VOICE_AGENT_GROQ_MODEL` | `groq` | Model (default: `whisper-large-v3-turbo`) |
+| `VOICE_AGENT_GROQ_LANGUAGE` | `groq` | Language code (default: `en`) |
+| `GLADIA_API_KEY` | `gladia` | Gladia API key |
+
+### TTS keys & options
+
+| Variable | Purpose |
+|---|---|
 | `VOICE_AGENT_TTS_VOICE` | macOS `say` voice name (e.g. `Samantha`) |
-| `VOICE_AGENT_OPENAI_STT_MODEL` | OpenAI STT model name (default: `whisper-1`) |
 | `VOICE_AGENT_OPENAI_TTS_VOICE` | OpenAI TTS voice (`alloy` / `echo` / `fable` / `onyx` / `nova` / `shimmer`) |
-| `VOICE_AGENT_AZURE_TTS_VOICE` | Azure Speech TTS voice (default: `en-US-AriaNeural`) |
-| `HF_HUB_ENABLE_HF_TRANSFER` | Set to `1` for faster HuggingFace model downloads |
-| `OPENAI_API_KEY` | OpenAI STT / TTS backends |
-| `AZURE_OPENAI_ENDPOINT` | Azure OpenAI Whisper endpoint |
-| `AZURE_OPENAI_KEY` | Azure OpenAI key |
-| `AZURE_WHISPER_DEPLOYMENT` | Azure Whisper deployment name (default: `whisper`) |
 | `AZURE_SPEECH_KEY` | Azure Speech TTS key |
 | `AZURE_SPEECH_REGION` | Azure Speech TTS region (e.g. `eastus`) |
+| `VOICE_AGENT_AZURE_TTS_VOICE` | Azure TTS voice (default: `en-US-AriaNeural`) |
+| `HF_HUB_ENABLE_HF_TRANSFER` | Set to `1` for faster HuggingFace model downloads |
 
 ---
 
 ## Architecture
 
-
 ![micoracle architecture](./assets/architecture.svg)
 
 ### How it works
 
-1. **You speak a command** — e.g. *"Codex, refactor this function"*
+1. **You speak a command** — e.g. *"Micoracle, refactor this function"*
 2. **micoracle listens for real speech** — background noise is ignored via WebRTC VAD
-3. **Audio is transcribed** — using local or cloud STT backend
-4. **Wake word is checked** — only commands starting with `Claude` or `Codex` pass
+3. **Wake word is checked locally** — local STT transcribes the utterance; only `Claude`, `Codex`, or `Micoracle` pass the gate
+4. **Command STT fires** — if a cloud backend is configured, it re-transcribes for higher accuracy (paid API called only here)
 5. **Clean prompt is sent** — pasted into the target app, Enter pressed
 6. **Status cue plays** — e.g. *"listening"*, *"sent"*, or *"error"*
 
@@ -240,9 +331,9 @@ See [`.env.example`](./.env.example) for the full commented list.
 
 | Module | Responsibility |
 |---|---|
-| `hands_free_voice.py` | Main entry point — mic capture, VAD wiring, wake-word gate, dispatch loop |
+| `hands_free_voice.py` | Main entry point — mic capture, VAD wiring, wake-word gate, dual-backend dispatch loop |
 | `segmenter.py` | `VADSegmenter` — frame-by-frame VAD state machine, preroll ring buffer |
-| `stt.py` | `STTBackend` ABC + 4 implementations + OS-aware auto factory |
+| `stt.py` | `STTBackend` ABC + 10 implementations + shared HTTP helpers + OS-aware auto factory |
 | `tts.py` | `TTSBackend` ABC + 4 implementations + auto factory |
 | `platform_adapter.py` | `MacAdapter` / `LinuxAdapter` / `WindowsAdapter` + factory |
 
@@ -262,7 +353,10 @@ IDLE ──(speech frames ≥ 4)──▶ CAPTURING ──(silence ≥ 840 ms OR
 Grant microphone permission to your terminal. macOS: *Privacy & Security → Microphone*. Linux: check PulseAudio / PipeWire. Windows: *Settings → Privacy → Microphone*.
 
 **Wake word never fires.**
-Confirm the right mic with `--list-devices`. Say *"Codex"* slowly — fuzzy matching covers mishears, but low mic gain can strip initial consonants.
+Confirm the right mic with `--list-devices`. Say the wake word slowly — fuzzy matching covers common mishears, but very low mic gain can strip initial consonants.
+
+**Cloud backend not activating.**
+Check that the API key env var is set in `.env`. Run with `--command-stt-backend <name>` to test explicitly.
 
 **`[dispatch error]` on Wayland.**
 Wayland blocks programmatic window focus. Pass `--target-app <name>` and keep that window focused manually.
@@ -278,7 +372,7 @@ Accessibility + Automation permissions missing. *System Settings → Privacy & S
 ## Privacy & Security
 
 - **Local backends are fully on-device** — MLX Whisper and faster-whisper make zero network calls
-- **Cloud backends upload audio** (OpenAI, Azure) — use only if comfortable
+- **Cloud backends upload audio only after wake-word** — continuous listening never touches cloud APIs
 - **Clipboard temporarily overwritten** per dispatch — original contents restored immediately
 - **No telemetry. No analytics. No phone-home.**
 - **Accessibility permissions are powerful** — review the source before granting
@@ -287,12 +381,12 @@ Accessibility + Automation permissions missing. *System Settings → Privacy & S
 
 ## Future Scope
 
-- **Additional STT backends:** ElevenLabs Scribe and Google Gemini cloud transcription
 - **Stronger Linux target locking:** closer to macOS / Windows target reactivation behaviour
 - **Packaged installers:** smoother setup with platform-specific dependency checks
 - **Tray / menu bar control:** pause, resume, backend selection, target status
-- **Custom wake words:** beyond `Claude` and `Codex`
+- **Custom wake words:** user-defined beyond the built-in three
 - **Command history:** optional local log of recent accepted prompts
+- **Google Gemini STT:** cloud transcription backend
 
 ---
 
@@ -311,6 +405,7 @@ Accessibility + Automation permissions missing. *System Settings → Privacy & S
 ## Acknowledgements
 
 - [MLX Whisper](https://github.com/ml-explore/mlx-examples) · [faster-whisper](https://github.com/SYSTRAN/faster-whisper) · [py-webrtcvad](https://github.com/wiseman/py-webrtcvad)
+- [60dB.ai](https://60db.ai) · [ElevenLabs](https://elevenlabs.io) · [Deepgram](https://deepgram.com) · [Groq](https://groq.com) · [AssemblyAI](https://www.assemblyai.com) · [Gladia](https://gladia.io)
 - [sounddevice](https://python-sounddevice.readthedocs.io/) · [soundfile](https://python-soundfile.readthedocs.io/)
 - [xdotool](https://github.com/jordansissel/xdotool) · [wtype](https://github.com/atx/wtype) · [pyautogui](https://pyautogui.readthedocs.io/)
 - [pyttsx3](https://pyttsx3.readthedocs.io/)
