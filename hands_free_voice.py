@@ -72,10 +72,18 @@ CHECK_FIRST_N_WORDS = 3
 WAKE_VARIANTS: dict[str, set[str]] = {
     "claude": {
         "claude", "clawed", "cloud", "clod", "cloudy", "clyde", "claud",
+        "lord", "laud", "clod", "claw", "blod",
     },
     "codex": {
         "codex", "codec", "codecs", "coded", "coed", "goodx", "godex",
         "cortex", "kodak",
+    },
+    # "micoracle" is frequently split into two tokens by STT engines.
+    # Single-token variants go here; two-token "mic oracle" etc. are caught
+    # by the bigram check in detect_wake_word().
+    "micoracle": {
+        "micoracle", "mikoracle", "mcoracle", "micorical", "mikortu",
+        "micordale", "mick oracle", "mic oracle", "meek oracle",
     },
 }
 
@@ -92,15 +100,33 @@ SILENCE_HALLUCINATIONS = {
 
 
 def detect_wake_word(text: str) -> tuple[str | None, int]:
+    """Return (wake_name, last_word_idx) or (None, -1).
+
+    last_word_idx is the index of the final word consumed by the wake phrase
+    so that extract_command(text, last_word_idx) correctly skips past it
+    regardless of whether the wake word is one token or two.
+    """
     words = [w.strip(",.!?;:\"'") for w in text.split() if w.strip(",.!?;:\"'")]
     for idx, word in enumerate(words[:CHECK_FIRST_N_WORDS]):
         lw = word.lower()
         for wake, variants in WAKE_VARIANTS.items():
+            # ── single-token match ──────────────────────────────────
             if lw in variants:
                 return wake, idx
             for variant in variants:
                 if difflib.SequenceMatcher(None, lw, variant).ratio() >= WAKE_FUZZY_THRESHOLD:
                     return wake, idx
+
+            # ── bigram match: "mic" + "oracle" → "micoracle" ───────
+            # Concatenate this word with the next and test against variants.
+            if idx + 1 < len(words):
+                bigram = lw + words[idx + 1].lower()
+                if bigram in variants:
+                    return wake, idx + 1        # last word idx = idx+1
+                for variant in variants:
+                    if difflib.SequenceMatcher(None, bigram, variant).ratio() >= WAKE_FUZZY_THRESHOLD:
+                        return wake, idx + 1
+
     return None, -1
 
 
@@ -222,9 +248,26 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--stt-backend",
         default=os.environ.get("VOICE_AGENT_STT_BACKEND", "auto").strip() or "auto",
-        choices=["auto", "mlx", "faster", "openai", "azure"],
-        help="Speech-to-text backend. 'auto' picks MLX on Apple Silicon, "
-             "faster-whisper elsewhere.",
+        choices=[
+            "auto", "mlx", "faster",
+            "openai", "azure", "realtime",
+            "60db", "elevenlabs", "deepgram", "assemblyai", "groq", "gladia",
+        ],
+        help="Speech-to-text backend for continuous listening / wake-word detection. "
+             "'auto' picks MLX on Apple Silicon, faster-whisper elsewhere.",
+    )
+    parser.add_argument(
+        "--command-stt-backend",
+        default=os.environ.get("VOICE_AGENT_COMMAND_STT_BACKEND", "").strip() or None,
+        choices=[
+            "mlx", "faster",
+            "openai", "azure", "realtime",
+            "60db", "elevenlabs", "deepgram", "assemblyai", "groq", "gladia",
+        ],
+        help="STT backend for the command prompt after wake-word detection. "
+             "Defaults to the same backend as --stt-backend. "
+             "Use 'realtime' to stream to GPT-4o Realtime only after wake-word "
+             "so continuous-listening audio is never billed.",
     )
     parser.add_argument(
         "--tts-backend",
@@ -288,25 +331,78 @@ def main() -> int:
             flush=True,
         )
 
-    # STT backend.
+    # Only local whisper backends are allowed for continuous listening.
+    # Every other backend (cloud / paid) is restricted to post-wake-word commands.
+    _LOCAL_BACKENDS = {"mlx", "faster", "auto"}
+
+    # Resolve effective backend names before instantiating anything.
+    effective_stt = args.stt_backend          # for continuous listening
+    effective_cmd = args.command_stt_backend  # for commands after wake-word (may be None)
+
+    if effective_stt not in _LOCAL_BACKENDS:
+        # Auto-split: move the paid backend to the command slot, use local for listening.
+        local = _stt.auto_select_stt_backend()
+        if effective_cmd is None:
+            effective_cmd = effective_stt
+        print(
+            f"[cost-guard] '{effective_stt}' is a paid backend — "
+            f"using '{local}' for listening, '{effective_cmd}' for commands only.",
+            flush=True,
+        )
+        effective_stt = local
+
+    # Build a shared STTConfig so both backends inherit the same API keys / params.
+    _stt_config_kwargs = dict(
+        mlx_repo=os.environ.get(
+            "VOICE_AGENT_MLX_REPO", "mlx-community/whisper-medium.en-mlx-4bit",
+        ),
+        faster_model=os.environ.get("VOICE_AGENT_FASTER_MODEL", "small.en"),
+        faster_device=os.environ.get("VOICE_AGENT_FASTER_DEVICE", "auto"),
+        faster_compute_type=os.environ.get("VOICE_AGENT_FASTER_COMPUTE", "int8"),
+        openai_api_key=os.environ.get("OPENAI_API_KEY"),
+        openai_model=os.environ.get("VOICE_AGENT_OPENAI_STT_MODEL", "whisper-1"),
+        azure_endpoint=os.environ.get("AZURE_OPENAI_ENDPOINT"),
+        azure_api_key=os.environ.get("AZURE_OPENAI_KEY"),
+        azure_deployment=os.environ.get("AZURE_WHISPER_DEPLOYMENT", "whisper"),
+        realtime_api_key=os.environ.get("OPENAI_API_KEY"),
+        realtime_model=os.environ.get(
+            "VOICE_AGENT_REALTIME_MODEL", "gpt-4o-transcribe",
+        ),
+        sixtydb_api_key=os.environ.get("SIXTYDB_API_KEY"),
+        sixtydb_language=os.environ.get("VOICE_AGENT_SIXTYDB_LANGUAGE", "en"),
+        elevenlabs_api_key=os.environ.get("ELEVENLABS_API_KEY"),
+        elevenlabs_model=os.environ.get("VOICE_AGENT_ELEVENLABS_MODEL", "scribe_v2"),
+        elevenlabs_language=os.environ.get("VOICE_AGENT_ELEVENLABS_LANGUAGE", "en"),
+        deepgram_api_key=os.environ.get("DEEPGRAM_API_KEY"),
+        deepgram_model=os.environ.get("VOICE_AGENT_DEEPGRAM_MODEL", "nova-2"),
+        deepgram_language=os.environ.get("VOICE_AGENT_DEEPGRAM_LANGUAGE", "en"),
+        assemblyai_api_key=os.environ.get("ASSEMBLYAI_API_KEY"),
+        assemblyai_language=os.environ.get("VOICE_AGENT_ASSEMBLYAI_LANGUAGE", "en"),
+        groq_api_key=os.environ.get("GROQ_API_KEY"),
+        groq_model=os.environ.get("VOICE_AGENT_GROQ_MODEL", "whisper-large-v3-turbo"),
+        groq_language=os.environ.get("VOICE_AGENT_GROQ_LANGUAGE", "en"),
+        gladia_api_key=os.environ.get("GLADIA_API_KEY"),
+    )
+
+    # Primary STT — continuous listening and wake-word detection (always local).
     try:
         stt_backend = _stt.make_stt_backend(_stt.STTConfig(
-            backend=args.stt_backend,
-            mlx_repo=os.environ.get(
-                "VOICE_AGENT_MLX_REPO", "mlx-community/whisper-medium.en-mlx-4bit",
-            ),
-            faster_model=os.environ.get("VOICE_AGENT_FASTER_MODEL", "small.en"),
-            faster_device=os.environ.get("VOICE_AGENT_FASTER_DEVICE", "auto"),
-            faster_compute_type=os.environ.get("VOICE_AGENT_FASTER_COMPUTE", "int8"),
-            openai_api_key=os.environ.get("OPENAI_API_KEY"),
-            openai_model=os.environ.get("VOICE_AGENT_OPENAI_STT_MODEL", "whisper-1"),
-            azure_endpoint=os.environ.get("AZURE_OPENAI_ENDPOINT"),
-            azure_api_key=os.environ.get("AZURE_OPENAI_KEY"),
-            azure_deployment=os.environ.get("AZURE_WHISPER_DEPLOYMENT", "whisper"),
+            backend=effective_stt, **_stt_config_kwargs,
         ))
     except Exception as exc:
         print(f"STT backend init failed: {exc}", file=sys.stderr)
         return 1
+
+    # Command STT — activated only after wake-word is confirmed.
+    command_stt = stt_backend
+    if effective_cmd:
+        try:
+            command_stt = _stt.make_stt_backend(_stt.STTConfig(
+                backend=effective_cmd, **_stt_config_kwargs,
+            ))
+        except Exception as exc:
+            print(f"Command STT backend init failed: {exc}", file=sys.stderr)
+            return 1
 
     # TTS backend.
     tts_choice = "none" if args.no_speak else args.tts_backend
@@ -342,8 +438,13 @@ def main() -> int:
     def worker() -> None:
         while True:
             pcm = utterance_q.get()
+            # Check armed state BEFORE transcribing so the command backend
+            # (e.g. realtime) is used for the follow-up prompt, not the
+            # continuous-listening utterances.
+            armed = wake_state.active_backend()
+            backend = command_stt if armed else stt_backend
             try:
-                text = stt_backend.transcribe(pcm, SAMPLE_RATE)
+                text = backend.transcribe(pcm, SAMPLE_RATE)
             except Exception as exc:
                 print(f"[transcribe error] {exc}", flush=True)
                 tts_backend.speak("error")
@@ -409,11 +510,13 @@ def main() -> int:
     device_info = sd.query_devices(device)
 
     print(f"Global VoiceCode ready on {platform.system()} ({platform.machine()}).")
-    print(f"  Input device: {device_info['name']}")
-    print(f"  STT backend:  {stt_backend.name}")
-    print(f"  TTS backend:  {tts_backend.name}")
-    print(f"  Target app (locked): {target_app}")
-    print("  Say:  'claude, <your prompt>'  or  'codex, <your prompt>'")
+    print(f"  Input device:     {device_info['name']}")
+    print(f"  STT (listen):     {stt_backend.name}")
+    cmd_label = command_stt.name if command_stt is not stt_backend else f"{stt_backend.name} (same)"
+    print(f"  STT (command):    {cmd_label}")
+    print(f"  TTS backend:      {tts_backend.name}")
+    print(f"  Target app:       {target_app}")
+    print("  Say:  'claude, …'  or  'codex, …'  or  'micoracle, …'")
     print("  (non-wake-word speech is ignored)")
     print()
 

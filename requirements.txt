@@ -13,8 +13,14 @@ soundfile>=0.12.0
 # Cross-platform local (Linux / Windows / Intel Mac):
 #     pip install faster-whisper
 #
-# Cloud (OpenAI Whisper API or Azure OpenAI Whisper):
+# Cloud batch (OpenAI Whisper API or Azure OpenAI Whisper):
 #     pip install openai
+#
+# Cloud realtime — GPT-4o Realtime transcription (post-wake-word only):
+#     pip install openai websockets
+#
+# 60dB.ai — non-hallucinating cloud STT, 39 languages, <300 ms:
+#     (no extra packages — uses Python stdlib urllib only)
 
 # ───── TTS backend: pick ONE (status cues only — optional) ─────
 #
