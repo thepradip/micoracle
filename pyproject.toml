@@ -1,0 +1,97 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "micoracle"
+version = "1.5.0"
+description = "Hands-free voice input for Claude Code, Codex CLI, and any terminal — cross-platform"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Pradip Tivhale", email = "pradiptivhale@gmail.com" }]
+requires-python = ">=3.10"
+keywords = [
+    "voice", "speech-to-text", "cli", "hands-free", "whisper",
+    "claude", "codex", "micoracle", "voice-input", "terminal",
+    "ai-coding", "claude-code", "codex-cli",
+    "mlx-whisper", "faster-whisper", "dictation", "wakeword",
+    "tts", "cross-platform",
+    "60db", "elevenlabs", "deepgram", "groq", "assemblyai", "gladia",
+    "openai-realtime", "cost-guard",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Utilities",
+]
+
+# Core deps — required on every platform.
+dependencies = [
+    "numpy>=1.24",
+    "sounddevice>=0.4.6",
+    "webrtcvad-wheels>=2.0.14",
+    "setuptools>=61",
+    "soundfile>=0.12.0",
+    "hf-transfer>=0.1.6; platform_system != 'Windows'",
+    "huggingface_hub>=0.20.0",
+    "pyperclip>=1.8.0; platform_system == 'Windows'",
+    "pyautogui>=0.9.54; platform_system == 'Windows'",
+    "pywin32>=306; platform_system == 'Windows'",
+    "psutil>=5.9.0; platform_system == 'Windows'",
+]
+
+[project.optional-dependencies]
+# Local STT backends
+mlx     = ["mlx-whisper"]
+faster  = ["faster-whisper>=1.0.0"]
+
+# Cloud STT backends
+openai      = ["openai>=1.0.0"]
+azure       = ["openai>=1.0.0"]
+realtime    = ["openai>=1.0.0", "websockets>=12.0"]
+
+# 60db, elevenlabs, deepgram, groq, assemblyai, gladia
+# use stdlib urllib only — no extra pip install needed
+
+# TTS backends
+pyttsx3 = ["pyttsx3"]
+
+# Windows dispatch
+windows = ["pyperclip>=1.8.0", "pyautogui>=0.9.54", "pywin32>=306", "psutil>=5.9.0"]
+
+# Pro tier — offline license verification (Ed25519) + optional YAML macros
+pro = ["cryptography>=39.0", "pyyaml>=6.0"]
+
+# Convenience bundles
+local = ["micoracle[faster,pyttsx3]"]
+cloud = ["micoracle[openai]"]
+all   = ["micoracle[faster,openai,realtime,pyttsx3,pro]"]
+
+[project.scripts]
+micoracle = "hands_free_voice:main"
+
+[project.urls]
+Homepage    = "https://github.com/thepradip/micoracle"
+Repository  = "https://github.com/thepradip/micoracle"
+"Bug Tracker" = "https://github.com/thepradip/micoracle/issues"
+
+[tool.setuptools]
+py-modules = [
+    "hands_free_voice",
+    "platform_adapter",
+    "segmenter",
+    "stt",
+    "tts",
+    "paths",
+    "pro",
+    "macros",
+    "analytics",
+]

@@ -3,6 +3,10 @@
 .env.local
 .env.*.local
 
+# Pro license signing key — vendor-private, never commit.
+signing_key.pem
+*.signing.pem
+
 # Local STT/TTS model caches (re-downloaded on demand; large).
 models/
 *.onnx

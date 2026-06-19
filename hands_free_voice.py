@@ -25,11 +25,15 @@ import queue
 import sys
 import threading
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
 
+import analytics as _analytics
+import macros as _macros
 import platform_adapter as _pa
+import pro
 import stt as _stt
 import tts as _tts
 from segmenter import VADSegmenter
@@ -54,6 +58,8 @@ _load_dotenv(Path(__file__).resolve().parent / ".env")
 
 # ──────────────────────────── constants ───────────────────────────
 
+
+_VERSION = "1.5.0"
 
 SAMPLE_RATE = 16000
 FRAME_MS = 30
@@ -94,6 +100,50 @@ SILENCE_HALLUCINATIONS = {
     "thanks for watching.", "amen", "amen.", "you", "you.", "bye", "bye.",
     ".", "okay", "okay.", "ok", "ok.",
 }
+
+
+# ──────────────────────── custom wake words ───────────────────────
+
+
+def register_custom_wake_words(mapping: dict[str, list[str]]) -> list[str]:
+    """Merge user-defined wake words into ``WAKE_VARIANTS`` (Pro feature).
+
+    Accepts ``{"jarvis": ["jarvis", "jervis"], ...}``. A wake word with no
+    variants gets itself as its only variant. Returns the names registered.
+    """
+    added: list[str] = []
+    for name, variants in mapping.items():
+        name = str(name).strip().lower()
+        if not name:
+            continue
+        words = {name} | {str(v).strip().lower() for v in (variants or []) if str(v).strip()}
+        WAKE_VARIANTS.setdefault(name, set()).update(words)
+        added.append(name)
+    return added
+
+
+def load_custom_wake_words(path: Path | None = None) -> dict[str, list[str]]:
+    """Read custom wake words from ``<config>/wake_words.json``.
+
+    Supports either a mapping ``{"jarvis": ["jervis"]}`` or a bare list
+    ``["jarvis", "friday"]`` (each entry becomes its own wake word).
+    """
+    import json
+
+    import paths
+
+    path = path or paths.config_path("wake_words.json")
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text() or "{}")
+    except (ValueError, OSError):
+        return {}
+    if isinstance(data, list):
+        return {str(w).strip().lower(): [] for w in data if str(w).strip()}
+    if isinstance(data, dict):
+        return {str(k).strip().lower(): list(v or []) for k, v in data.items() if str(k).strip()}
+    return {}
 
 
 # ─────────────────────────── text utilities ───────────────────────
@@ -284,10 +334,89 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+# ─────────────────────────── subcommands ──────────────────────────
+
+
+_UPGRADE_URL = "https://github.com/thepradip/micoracle#pro"
+
+
+def _cmd_version(_argv: list[str]) -> int:
+    print(f"micoracle {_VERSION}")
+    print(f"License: {pro.load_entitlement().describe()}")
+    return 0
+
+
+def _cmd_stats(argv: list[str]) -> int:
+    ent = pro.load_entitlement()
+    if argv and argv[0] in ("--export", "-e"):
+        if not ent.has(pro.ANALYTICS_EXPORT):
+            print(f"Analytics export is a Pro feature. Upgrade: {_UPGRADE_URL}",
+                  file=sys.stderr)
+            return 2
+        fmt = argv[1] if len(argv) > 1 else "json"
+        try:
+            print(_analytics.export(fmt))
+        except ValueError as exc:
+            print(exc, file=sys.stderr)
+            return 1
+        return 0
+    print(_analytics.render_summary(_analytics.summarize()))
+    return 0
+
+
+def _cmd_license(argv: list[str]) -> int:
+    if not argv:
+        print(pro.load_entitlement().describe())
+        return 0
+    try:
+        ent = pro.save_license(argv[0])
+    except pro.LicenseError as exc:
+        print(f"License rejected: {exc}", file=sys.stderr)
+        return 1
+    print(f"License activated — {ent.describe()}")
+    return 0
+
+
+def _cmd_macros(argv: list[str]) -> int:
+    ent = pro.load_entitlement()
+    if argv and argv[0] == "--init":
+        path = _macros.write_default_macros()
+        print(f"Wrote starter macros to {path}")
+        if not ent.has(pro.MACROS):
+            print("(Macros require a Pro license to take effect at runtime.)")
+        return 0
+    store = _macros.load_macros()
+    if len(store) == 0:
+        print("No macros defined. Run 'micoracle macros --init' to create starters.")
+        return 0
+    if not ent.has(pro.MACROS):
+        print(f"[Pro] Macros listed below, but only expand with a Pro license. {_UPGRADE_URL}\n")
+    for m in store.list():
+        scope = f" ({m.wake})" if m.wake else ""
+        print(f"  {m.trigger}{scope}  ->  {m.template}")
+    return 0
+
+
+_SUBCOMMANDS = {
+    "stats": _cmd_stats,
+    "license": _cmd_license,
+    "macros": _cmd_macros,
+    "version": _cmd_version,
+}
+
+
+def _run_subcommand(name: str, argv: list[str]) -> int:
+    return _SUBCOMMANDS[name](argv)
+
+
 # ───────────────────────────── main loop ──────────────────────────
 
 
 def main() -> int:
+    argv = sys.argv[1:]
+    if argv and argv[0] in _SUBCOMMANDS:
+        return _run_subcommand(argv[0], argv[1:])
+
     args = parse_args()
 
     if args.list_devices:
@@ -435,6 +564,25 @@ def main() -> int:
     utterance_q: queue.Queue[np.ndarray] = queue.Queue()
     wake_state = WakeState()
 
+    # ── Pro features (entitlement-gated; core stays free) ────────────
+    entitlement = pro.load_entitlement()
+    macro_store: _macros.MacroStore | None = None
+    if entitlement.has(pro.MACROS):
+        macro_store = _macros.load_macros()
+    custom_added: list[str] = []
+    if entitlement.has(pro.CUSTOM_WAKE_WORDS):
+        custom_added = register_custom_wake_words(load_custom_wake_words())
+    tracker = _analytics.UsageTracker()
+
+    ctx = DispatchContext(
+        adapter=adapter,
+        target_app=target_app,
+        tts=tts_backend,
+        command_backend=command_stt.name,
+        macros=macro_store,
+        tracker=tracker,
+    )
+
     def worker() -> None:
         while True:
             pcm = utterance_q.get()
@@ -463,7 +611,7 @@ def main() -> int:
                 if wake:
                     cmd = extract_command(text, idx)
                     if cmd:
-                        _dispatch(adapter, target_app, wake, cmd, tts_backend)
+                        _dispatch(ctx, wake, cmd)
                         wake_state.clear()
                     else:
                         wake_state.arm(wake)
@@ -472,7 +620,7 @@ def main() -> int:
                     continue
                 cmd = text.strip(" ,.!?;:")
                 if cmd:
-                    _dispatch(adapter, target_app, armed, cmd, tts_backend)
+                    _dispatch(ctx, armed, cmd)
                     wake_state.clear()
                 else:
                     print(f"[{armed}] empty command, ignored", flush=True)
@@ -485,7 +633,7 @@ def main() -> int:
                 continue
             cmd = extract_command(text, idx)
             if cmd:
-                _dispatch(adapter, target_app, wake, cmd, tts_backend)
+                _dispatch(ctx, wake, cmd)
                 wake_state.clear()
             else:
                 wake_state.arm(wake)
@@ -516,7 +664,15 @@ def main() -> int:
     print(f"  STT (command):    {cmd_label}")
     print(f"  TTS backend:      {tts_backend.name}")
     print(f"  Target app:       {target_app}")
-    print("  Say:  'claude, …'  or  'codex, …'  or  'micoracle, …'")
+    print(f"  License:          {entitlement.describe()}")
+    if macro_store is not None:
+        print(f"  Macros:           {len(macro_store)} loaded")
+    if custom_added:
+        print(f"  Custom wake:      {', '.join(custom_added)}")
+    say_words = "'claude, …'  or  'codex, …'  or  'micoracle, …'"
+    if custom_added:
+        say_words += "  or  " + "  or  ".join(f"'{w}, …'" for w in custom_added)
+    print(f"  Say:  {say_words}")
     print("  (non-wake-word speech is ignored)")
     print()
 
@@ -537,22 +693,43 @@ def main() -> int:
                 utterance_q.put(pcm)
 
 
-def _dispatch(
-    adapter: _pa.PlatformAdapter,
-    target_app: str,
-    wake: str,
-    command: str,
-    tts: _tts.TTSBackend,
-) -> None:
-    print(f"[{wake}] -> {command}", flush=True)
+@dataclass
+class DispatchContext:
+    """Everything the dispatch path needs, assembled once at startup."""
+
+    adapter: _pa.PlatformAdapter
+    target_app: str
+    tts: _tts.TTSBackend
+    command_backend: str
+    macros: "_macros.MacroStore | None" = None
+    tracker: "_analytics.UsageTracker | None" = None
+
+
+def _dispatch(ctx: DispatchContext, wake: str, command: str) -> None:
+    # Pro: expand a matching voice macro into its full prompt template.
+    macro_name: str | None = None
+    final = command
+    if ctx.macros is not None:
+        expansion = ctx.macros.expand(command, wake)
+        if expansion.matched:
+            final = expansion.text
+            macro_name = expansion.macro.trigger
+            print(f"[{wake}] macro '{macro_name}' expanded", flush=True)
+
+    print(f"[{wake}] -> {final}", flush=True)
     try:
-        adapter.paste_and_return(command, target_app)
+        ctx.adapter.paste_and_return(final, ctx.target_app)
     except Exception as exc:
         print(f"[dispatch error] {exc}", flush=True)
-        tts.speak("error")
+        ctx.tts.speak("error")
         return
-    print(f"[{wake}] sent to {target_app}", flush=True)
-    tts.speak("sent")
+    print(f"[{wake}] sent to {ctx.target_app}", flush=True)
+    ctx.tts.speak("sent")
+
+    if ctx.tracker is not None:
+        ctx.tracker.record(
+            wake=wake, text=final, backend=ctx.command_backend, macro=macro_name,
+        )
 
 
 if __name__ == "__main__":

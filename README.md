@@ -379,14 +379,82 @@ Accessibility + Automation permissions missing. *System Settings → Privacy & S
 
 ---
 
+## Pro
+
+The core is MIT and free forever. **MicOracle Pro** adds power-user features for
+developers who live in their AI assistant all day. Verification is **fully
+offline** — a signed license is checked on-device against an embedded key, with
+no license server and no phone-home.
+
+| Feature | Free | Pro |
+|---|:---:|:---:|
+| All STT / TTS backends, wake words, dispatch | ✓ | ✓ |
+| Local usage stats (`micoracle stats`) | ✓ | ✓ |
+| **Voice macros** — spoken shortcuts → full prompt templates | | ✓ |
+| **Custom wake words** — your own phrases beyond the built-in three | | ✓ |
+| **Analytics export** — CSV / JSON of the local usage log | | ✓ |
+| **Team config** (Team tier) | | ✓ |
+
+```bash
+pip install micoracle[pro]          # adds offline license verification
+micoracle license MICO1...          # activate (persists to ~/.micoracle/license)
+micoracle license                   # show current tier
+```
+
+### Voice macros
+
+Say a short trigger; MicOracle expands it into a full prompt before it reaches
+the terminal. Trailing words fill the template's `{args}` slot.
+
+```bash
+micoracle macros --init             # write starter macros to ~/.micoracle/macros.json
+micoracle macros                    # list active macros
+```
+
+```jsonc
+// ~/.micoracle/macros.json
+{
+  "macros": [
+    { "trigger": "write tests for",
+      "template": "Write thorough unit tests for {args}, covering edge cases and error paths." },
+    { "trigger": "ship it",
+      "template": "Stage all changes, write a conventional-commit message, and commit.",
+      "wake": "codex" }
+  ]
+}
+```
+
+*"Codex, write tests for the parser"* → `Write thorough unit tests for the parser, covering edge cases and error paths.`
+
+### Custom wake words
+
+```jsonc
+// ~/.micoracle/wake_words.json
+{ "jarvis": ["jervis"], "friday": [] }
+```
+
+Now *"Jarvis, deploy the staging build"* dispatches just like the built-in wake words.
+
+### Usage stats
+
+```bash
+micoracle stats                     # time saved, words dictated, est. cloud cost
+micoracle stats --export csv        # Pro: dump the full local log
+```
+
+The usage log lives at `~/.micoracle/usage.jsonl`, is **never uploaded**, and
+estimates are local-only.
+
+---
+
 ## Future Scope
 
 - **Stronger Linux target locking:** closer to macOS / Windows target reactivation behaviour
 - **Packaged installers:** smoother setup with platform-specific dependency checks
 - **Tray / menu bar control:** pause, resume, backend selection, target status
-- **Custom wake words:** user-defined beyond the built-in three
 - **Command history:** optional local log of recent accepted prompts
 - **Google Gemini STT:** cloud transcription backend
+- **Team config sync:** push a shared macro / wake-word config across a team (Team tier)
 
 ---
 
