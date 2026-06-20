@@ -58,7 +58,8 @@ class MicOracleApp(rumps.App):
         super().__init__(APP_NAME, title=ICON_IDLE, quit_button=None)
         s = _load_settings()
         self.cfg = EngineConfig(
-            stt_backend=s.get("stt_backend", "auto"),
+            # Bundled app uses faster-whisper (MLX isn't frozen into the .app).
+            stt_backend=s.get("stt_backend", "faster"),
             command_stt_backend=(s.get("command_stt_backend") or None),
             tts_backend=s.get("tts_backend", "auto"),
             target_app=s.get("target_app", ""),

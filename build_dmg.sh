@@ -42,9 +42,12 @@ pip install --upgrade pip wheel >/dev/null
 
 echo "==> Installing runtime + build dependencies"
 pip install -r requirements.txt
-pip install "mlx-whisper" "faster-whisper>=1.0.0" rumps py2app
+# faster-whisper is the bundled local STT (MLX 0.31+ can't be frozen by py2app).
+pip install "faster-whisper>=1.0.0" rumps py2app
 # Pro features (optional but bundled so licensed users get them):
 pip install "cryptography>=39.0" "pyyaml>=6.0" || true
+# Jarvis conversational brain (BYO-key) — bundle both providers.
+pip install "openai>=1.0.0" "anthropic>=0.40.0" || true
 # py2app breaks on setuptools >=71 (drops the legacy install path it uses).
 pip install "setuptools<71"
 

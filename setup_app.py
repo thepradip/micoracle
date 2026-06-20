@@ -36,6 +36,8 @@ INCLUDES = [
     "macros",
     "analytics",
     "paths",
+    "control",
+    "jarvis",
     "numpy",
     "sounddevice",
     "webrtcvad",
@@ -52,19 +54,30 @@ PACKAGES = [
     "numpy",
     "sounddevice",
     "soundfile",
-    # MLX (Apple Silicon local STT) and its dependency tree
-    "mlx",
-    "mlx_whisper",
-    "numba",
-    "llvmlite",
-    "scipy",
-    "tiktoken",
-    "regex",
     "huggingface_hub",
     "tqdm",
-    # faster-whisper (cross-platform local STT) and its engine
+    # Local STT for the bundled app: faster-whisper (CPU). MLX is intentionally
+    # NOT bundled — mlx 0.31+ is a namespace package (no __init__.py) that
+    # py2app cannot collect. MLX still works when running from source.
     "faster_whisper",
     "ctranslate2",
+    # Jarvis conversational brain (BYO-key) — OpenAI / Anthropic + their deps.
+    # Optional at runtime: jarvis.make_agent() catches import errors and the
+    # app degrades to offline computer-control if these fail to load.
+    "openai",
+    "anthropic",
+    "httpx",
+    "httpcore",
+    "pydantic",
+    "pydantic_core",
+    "anyio",
+    "sniffio",
+    "certifi",
+    "idna",
+    "distro",
+    "jiter",
+    "h11",
+    "annotated_types",
 ]
 
 # These are optional at runtime; excluding keeps the bundle smaller. Remove an

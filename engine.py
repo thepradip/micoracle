@@ -145,7 +145,17 @@ class VoiceEngine:
             effective_stt = local
 
         kwargs = _stt_config_kwargs()
-        stt_backend = _stt.make_stt_backend(_stt.STTConfig(backend=effective_stt, **kwargs))
+        try:
+            stt_backend = _stt.make_stt_backend(_stt.STTConfig(backend=effective_stt, **kwargs))
+        except Exception as exc:
+            # The frozen .app bundles faster-whisper, not MLX. If a saved/auto
+            # setting asks for mlx and it isn't importable, fall back gracefully.
+            if effective_stt in ("mlx", "auto"):
+                log.warning("STT %r unavailable (%s); falling back to faster-whisper", effective_stt, exc)
+                effective_stt = "faster"
+                stt_backend = _stt.make_stt_backend(_stt.STTConfig(backend=effective_stt, **kwargs))
+            else:
+                raise
         command_stt = stt_backend
         if effective_cmd:
             command_stt = _stt.make_stt_backend(_stt.STTConfig(backend=effective_cmd, **kwargs))
