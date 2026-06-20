@@ -31,6 +31,8 @@ from pathlib import Path
 import numpy as np
 
 import analytics as _analytics
+import control as _control
+import jarvis as _jarvis
 import macros as _macros
 import platform_adapter as _pa
 import pro
@@ -87,6 +89,9 @@ WAKE_VARIANTS: dict[str, set[str]] = {
     # "micoracle" is frequently split into two tokens by STT engines.
     # Single-token variants go here; two-token "mic oracle" etc. are caught
     # by the bigram check in detect_wake_word().
+    # "micoracle" is the assistant: it performs computer-control actions and
+    # answers questions (spoken), rather than pasting into the target app like
+    # the "claude" / "codex" coding-dictation wake words.
     "micoracle": {
         "micoracle", "mikoracle", "mcoracle", "micorical", "mikortu",
         "micordale", "mick oracle", "mic oracle", "meek oracle",
@@ -440,19 +445,10 @@ def main() -> int:
         print(f"Platform adapter error: {exc}", file=sys.stderr)
         return 1
 
-    # Target app lock.
+    # Target app. Default (empty) is DYNAMIC: each command is typed into whatever
+    # app is frontmost at that moment. Pass --target-app to pin to one app.
     target_app = args.target_app.strip()
-    if not target_app:
-        try:
-            target_app = adapter.get_frontmost_app()
-        except RuntimeError as exc:
-            print(f"Unable to capture frontmost app: {exc}", file=sys.stderr)
-            print(
-                "Pass --target-app <name> to pin the dispatch target explicitly.",
-                file=sys.stderr,
-            )
-            return 1
-    if target_app not in adapter.supported_apps:
+    if target_app and target_app not in adapter.supported_apps:
         print(
             f"[warn] target app '{target_app}' is not in the known list for this OS "
             f"(known: {', '.join(sorted(adapter.supported_apps)) or 'none'}); "
@@ -573,6 +569,7 @@ def main() -> int:
     if entitlement.has(pro.CUSTOM_WAKE_WORDS):
         custom_added = register_custom_wake_words(load_custom_wake_words())
     tracker = _analytics.UsageTracker()
+    jarvis_agent = _jarvis.make_agent()
 
     ctx = DispatchContext(
         adapter=adapter,
@@ -581,6 +578,7 @@ def main() -> int:
         command_backend=command_stt.name,
         macros=macro_store,
         tracker=tracker,
+        jarvis=jarvis_agent,
     )
 
     def worker() -> None:
@@ -663,15 +661,19 @@ def main() -> int:
     cmd_label = command_stt.name if command_stt is not stt_backend else f"{stt_backend.name} (same)"
     print(f"  STT (command):    {cmd_label}")
     print(f"  TTS backend:      {tts_backend.name}")
-    print(f"  Target app:       {target_app}")
+    print(f"  Target app:       {target_app or '(active app at dispatch)'}")
     print(f"  License:          {entitlement.describe()}")
     if macro_store is not None:
         print(f"  Macros:           {len(macro_store)} loaded")
     if custom_added:
         print(f"  Custom wake:      {', '.join(custom_added)}")
-    say_words = "'claude, …'  or  'codex, …'  or  'micoracle, …'"
+    if jarvis_agent is not None:
+        print(f"  Assistant:        on ({jarvis_agent.provider}:{jarvis_agent.model}) — 'micoracle, …' acts & answers")
+    else:
+        print("  Assistant:        control actions only ('micoracle, take a screenshot'); add an API key to answer questions")
+    say_words = "'claude, …' / 'codex, …' to dictate;  'micoracle, …' to act/ask"
     if custom_added:
-        say_words += "  or  " + "  or  ".join(f"'{w}, …'" for w in custom_added)
+        say_words += ";  also " + ", ".join(f"'{w}, …'" for w in custom_added)
     print(f"  Say:  {say_words}")
     print("  (non-wake-word speech is ignored)")
     print()
@@ -703,9 +705,41 @@ class DispatchContext:
     command_backend: str
     macros: "_macros.MacroStore | None" = None
     tracker: "_analytics.UsageTracker | None" = None
+    jarvis: "_jarvis.JarvisAgent | None" = None
 
 
 def _dispatch(ctx: DispatchContext, wake: str, command: str) -> None:
+    # "micoracle" is the assistant: first try a computer-control action (open
+    # app, screenshot, search, type, switch); if it's not a command, converse
+    # via the LLM and speak the reply back.
+    if wake == "micoracle":
+        action = _control.route(command)
+        if action is not None:
+            status = "ok" if action.ok else "failed"
+            print(f"[micoracle] action {action.kind} ({status}): {action.detail}", flush=True)
+            if action.speak:
+                ctx.tts.speak(action.speak)
+            if ctx.tracker is not None:
+                ctx.tracker.record(
+                    wake=wake, text=command, backend=ctx.command_backend,
+                    macro=f"action:{action.kind}",
+                )
+            return
+        if ctx.jarvis is None:
+            print("[micoracle] not a command, and no LLM configured — set an API key "
+                  "and install with: pip install 'micoracle[jarvis]'", flush=True)
+            ctx.tts.speak("MicOracle needs an API key to answer questions")
+            return
+        print(f"[micoracle] you: {command}", flush=True)
+        reply = ctx.jarvis.ask(command)
+        print(f"[micoracle] {reply}", flush=True)
+        ctx.tts.speak(reply)
+        if ctx.tracker is not None:
+            ctx.tracker.record(
+                wake=wake, text=command, backend=ctx.command_backend, macro="assistant",
+            )
+        return
+
     # Pro: expand a matching voice macro into its full prompt template.
     macro_name: str | None = None
     final = command

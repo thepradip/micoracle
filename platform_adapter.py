@@ -42,7 +42,10 @@ class PlatformAdapter(ABC):
     def paste_and_return(self, text: str, target_app: str) -> None:
         """Paste ``text`` into ``target_app`` and press Return.
 
-        Must preserve the user's clipboard contents.
+        An empty ``target_app`` means **dynamic** dispatch: paste into whatever
+        application is frontmost at call time, without activating any specific
+        app. A non-empty value pins dispatch to that app (it is brought to the
+        front first). Must preserve the user's clipboard contents.
         """
 
 
@@ -97,10 +100,17 @@ class MacAdapter(PlatformAdapter):
             self._write_clipboard(original)
 
     def _build_dispatch_script(self, app_name: str) -> str:
-        escaped = app_name.replace("\\", "\\\\").replace('"', '\\"')
+        # Empty app_name → dynamic: paste into the current frontmost app without
+        # activating anything (System Events keystrokes go to whatever is front).
+        activate = ""
+        if app_name:
+            escaped = app_name.replace("\\", "\\\\").replace('"', '\\"')
+            activate = (
+                f'tell application "{escaped}" to activate\n'
+                f'delay {self.focus_delay_secs}\n'
+            )
         return (
-            f'tell application "{escaped}" to activate\n'
-            f'delay {self.focus_delay_secs}\n'
+            f'{activate}'
             'tell application "System Events"\n'
             '    keystroke "v" using command down\n'
             f'    delay {self.paste_delay_secs}\n'
@@ -304,8 +314,10 @@ class WindowsAdapter(PlatformAdapter):
         original = self._pyperclip.paste()
         try:
             self._pyperclip.copy(text)
-            self._activate_window(target_app)
-            time.sleep(self.focus_delay_secs)
+            # Empty target_app → dynamic: paste into the current foreground window.
+            if target_app:
+                self._activate_window(target_app)
+                time.sleep(self.focus_delay_secs)
             self._pyautogui.hotkey("ctrl", "v")
             time.sleep(self.paste_delay_secs)
             self._pyautogui.press("enter")

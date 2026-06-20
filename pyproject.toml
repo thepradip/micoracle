@@ -70,6 +70,14 @@ windows = ["pyperclip>=1.8.0", "pyautogui>=0.9.54", "pywin32>=306", "psutil>=5.9
 # Pro tier — offline license verification (Ed25519) + optional YAML macros
 pro = ["cryptography>=39.0", "pyyaml>=6.0"]
 
+# macOS menu-bar app (run with `micoracle-app`)
+app = ["rumps>=0.4.0"]
+
+# Jarvis — conversational voice assistant (say "jarvis, …").
+# Provider-agnostic: OpenAI (default) or Anthropic, chosen by JARVIS_PROVIDER
+# or whichever API key is set.
+jarvis = ["openai>=1.0.0", "anthropic>=0.40.0"]
+
 # Convenience bundles
 local = ["micoracle[faster,pyttsx3]"]
 cloud = ["micoracle[openai]"]
@@ -77,6 +85,7 @@ all   = ["micoracle[faster,openai,realtime,pyttsx3,pro]"]
 
 [project.scripts]
 micoracle = "hands_free_voice:main"
+micoracle-app = "voice_agent:main"
 
 [project.urls]
 Homepage    = "https://github.com/thepradip/micoracle"
@@ -94,4 +103,8 @@ py-modules = [
     "pro",
     "macros",
     "analytics",
+    "engine",
+    "voice_agent",
+    "jarvis",
+    "control",
 ]

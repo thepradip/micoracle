@@ -35,6 +35,11 @@ dist/
 .venv/
 venv/
 env/
+.build-venv/
+
+# py2app build leftovers.
+*.iconset/
+pyproject.toml.bak
 
 # OS cruft.
 .DS_Store
