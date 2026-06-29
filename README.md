@@ -81,7 +81,7 @@ Works with **[Claude Code](https://claude.ai/code)** · **[OpenAI Codex CLI](htt
 
 | Backend | `--stt-backend` | Best for | Install |
 |---|---|---|---|
-| MLX Whisper | `mlx` | Apple Silicon — fastest on-device | `pip install mlx-whisper` |
+| MLX Whisper | `mlx` | Apple Silicon — fastest on-device | `pip install "mlx-whisper" "numba>=0.65"` |
 | faster-whisper | `faster` | Cross-platform CPU / CUDA | `pip install faster-whisper` |
 
 ### Cloud (post-wake-word only — never billed for continuous listening)
@@ -161,7 +161,7 @@ sudo apt install wtype wl-clipboard portaudio19-dev python3-dev
 
 | Platform | Command |
 |---|---|
-| macOS Apple Silicon | `pip install mlx-whisper` |
+| macOS Apple Silicon | `pip install "mlx-whisper" "numba>=0.65"` |
 | macOS Intel / Linux / Windows | `pip install faster-whisper` |
 
 ### Step 4 — Pick a cloud STT backend (for commands, optional)
@@ -354,6 +354,9 @@ Grant microphone permission to your terminal. macOS: *Privacy & Security → Mic
 
 **Wake word never fires.**
 Confirm the right mic with `--list-devices`. Say the wake word slowly — fuzzy matching covers common mishears, but very low mic gain can strip initial consonants.
+
+**`Numba needs NumPy 2.3 or less` (MLX backend).**
+An old `numba` (a transitive dep of `mlx-whisper`) is pinned in your environment against a newer NumPy. Upgrade it: `pip install -U "numba>=0.65"`. Installing into a fresh virtualenv avoids this entirely.
 
 **Cloud backend not activating.**
 Check that the API key env var is set in `.env`. Run with `--command-stt-backend <name>` to test explicitly.
