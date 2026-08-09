@@ -61,7 +61,7 @@ _load_dotenv(Path(__file__).resolve().parent / ".env")
 # ──────────────────────────── constants ───────────────────────────
 
 
-_VERSION = "1.5.0"
+_VERSION = "1.6.0"
 
 SAMPLE_RATE = 16000
 FRAME_MS = 30
@@ -92,9 +92,20 @@ WAKE_VARIANTS: dict[str, set[str]] = {
     # "micoracle" is the assistant: it performs computer-control actions and
     # answers questions (spoken), rather than pasting into the target app like
     # the "claude" / "codex" coding-dictation wake words.
+    #
+    # "MicOracle" is a coined word Whisper mis-transcribes a lot, so the variant
+    # set is broad and includes real observed mishears (single- and two-token;
+    # two-token forms are also caught by the bigram check in detect_wake_word).
     "micoracle": {
         "micoracle", "mikoracle", "mcoracle", "micorical", "mikortu",
         "micordale", "mick oracle", "mic oracle", "meek oracle",
+        # observed Whisper mishears
+        "mykurikal", "my kurikal", "mycorrectly", "my correctly",
+        "mychronicle", "my chronicle", "mycorical", "my corical",
+        "mycoracle", "my coracle", "myoracle", "my oracle",
+        # phonetic neighbors
+        "miracle", "my miracle", "microcal", "mccorical", "makorical",
+        "mikorikal", "my carical", "macoracle", "mecoracle", "michorical",
     },
 }
 
@@ -570,6 +581,13 @@ def main() -> int:
         custom_added = register_custom_wake_words(load_custom_wake_words())
     tracker = _analytics.UsageTracker()
     jarvis_agent = _jarvis.make_agent()
+    agent_runner = None
+    try:
+        import agent as _agent
+
+        agent_runner = _agent.make_runner(tts_backend.speak)
+    except Exception as exc:
+        print(f"[warn] agent init failed ({exc}); assistant runs chat-only.", flush=True)
 
     ctx = DispatchContext(
         adapter=adapter,
@@ -579,6 +597,7 @@ def main() -> int:
         macros=macro_store,
         tracker=tracker,
         jarvis=jarvis_agent,
+        agent=agent_runner,
     )
 
     def worker() -> None:
@@ -601,6 +620,11 @@ def main() -> int:
                 print(f"[hallucination] {text[:60]}...", flush=True)
                 continue
             if is_silence_hallucination(text):
+                continue
+
+            # A running agent task gets first claim on speech: answers to its
+            # questions, confirmations, and "stop" are consumed here.
+            if ctx.agent is not None and ctx.agent.feed_user_speech(text):
                 continue
 
             armed = wake_state.active_backend()
@@ -667,8 +691,14 @@ def main() -> int:
         print(f"  Macros:           {len(macro_store)} loaded")
     if custom_added:
         print(f"  Custom wake:      {', '.join(custom_added)}")
-    if jarvis_agent is not None:
-        print(f"  Assistant:        on ({jarvis_agent.provider}:{jarvis_agent.model}) — 'micoracle, …' acts & answers")
+    if agent_runner is not None:
+        import agent as _agent_mod
+
+        _b = agent_runner.backend
+        _brain = f"{getattr(_b, 'name', '?')}:{getattr(_b, 'model', '?')}"
+        print(f"  Assistant:        agent on ({_brain}; tools: {_agent_mod.capabilities()}) — 'micoracle, …' acts, browses & answers")
+    elif jarvis_agent is not None:
+        print(f"  Assistant:        chat only ({jarvis_agent.provider}:{jarvis_agent.model}) — install 'micoracle[agent]' for browser/CLI tasks")
     else:
         print("  Assistant:        control actions only ('micoracle, take a screenshot'); add an API key to answer questions")
     say_words = "'claude, …' / 'codex, …' to dictate;  'micoracle, …' to act/ask"
@@ -706,6 +736,7 @@ class DispatchContext:
     macros: "_macros.MacroStore | None" = None
     tracker: "_analytics.UsageTracker | None" = None
     jarvis: "_jarvis.JarvisAgent | None" = None
+    agent: "object | None" = None  # agent.AgentRunner (tool-calling), optional
 
 
 def _dispatch(ctx: DispatchContext, wake: str, command: str) -> None:
@@ -723,6 +754,16 @@ def _dispatch(ctx: DispatchContext, wake: str, command: str) -> None:
                 ctx.tracker.record(
                     wake=wake, text=command, backend=ctx.command_backend,
                     macro=f"action:{action.kind}",
+                )
+            return
+        if ctx.agent is not None:
+            print(f"[micoracle agent] task: {command}", flush=True)
+            if not ctx.agent.submit(command):
+                ctx.tts.speak("Still working on the last task. Say stop to cancel.")
+                return
+            if ctx.tracker is not None:
+                ctx.tracker.record(
+                    wake=wake, text=command, backend=ctx.command_backend, macro="agent",
                 )
             return
         if ctx.jarvis is None:

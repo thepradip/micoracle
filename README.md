@@ -81,7 +81,7 @@ Works with **[Claude Code](https://claude.ai/code)** · **[OpenAI Codex CLI](htt
 
 | Backend | `--stt-backend` | Best for | Install |
 |---|---|---|---|
-| MLX Whisper | `mlx` | Apple Silicon — fastest on-device | `pip install mlx-whisper` |
+| MLX Whisper | `mlx` | Apple Silicon — fastest on-device | `pip install "mlx-whisper" "numba>=0.65"` |
 | faster-whisper | `faster` | Cross-platform CPU / CUDA | `pip install faster-whisper` |
 
 ### Cloud (post-wake-word only — never billed for continuous listening)
@@ -106,13 +106,44 @@ Works with **[Claude Code](https://claude.ai/code)** · **[OpenAI Codex CLI](htt
 
 | Say | Example |
 |---|---|
-| `Claude, …` | *"Claude, explain this function"* |
-| `Codex, …` | *"Codex, refactor to async"* |
-| `Micoracle, …` | *"Micoracle, write a SQL query"* |
+| `Claude, …` | *"Claude, explain this function"* (dictated into your terminal) |
+| `Codex, …` | *"Codex, refactor to async"* (dictated into your terminal) |
+| `Micoracle, …` | *"Micoracle, open hacker news and read me the top headlines"* (agent acts) |
 
 All three support **fuzzy mishear tolerance** — common STT splits like *"Mic Oracle"*, *"Mick Oracle"*, *"meek oracle"*, *"Lord"* (for Claude) are all caught automatically.
 
 **Two-step mode:** say the wake word alone → hear *"listening"* → speak your command within 8 s.
+
+---
+
+## The MicOracle Agent
+
+`micoracle, <do something>` is a real voice-driven agent, not just dictation. It routes in three layers:
+
+1. **Instant control actions** (offline, no LLM): *"take a screenshot"*, *"open Safari"*, *"switch to VS Code"*, *"search for rust lifetimes"*.
+2. **Agent tasks** (LLM tool loop): everything else runs through a tool-calling brain that can drive a real Chromium browser (navigate, click, fill, scrape, screenshot), take desktop screenshots, and delegate coding work to the **Claude Code** or **Codex** CLIs headlessly — then speaks the result.
+3. **Chat fallback**: if the agent isn't installed, plain questions still get spoken answers.
+
+What makes it robust:
+
+- **Asks before guessing** — ambiguous instructions trigger a spoken question; answer by voice.
+- **Verifies every step** — page read-backs, HTTP statuses, input read-backs, CLI exit codes; screenshots are fed back into the model so it *sees* the state. A task can only claim success with evidence; otherwise it reports failure honestly.
+- **Confirmation gate** — destructive-sounding actions (buy, delete, send, submit, …) require you to say *"yes"* first.
+- **Interruptible** — say *"stop"* or *"cancel"* any time to abort; you'll get an honest partial report.
+
+Setup:
+
+```bash
+pip install "micoracle[agent]"      # LLM SDKs + Playwright
+playwright install chromium         # one-time browser download
+export ANTHROPIC_API_KEY=...        # or OPENAI_API_KEY (MICORACLE_PROVIDER picks)
+```
+
+The claude/codex tools activate automatically when those CLIs are on your PATH. Try:
+
+> *"Micoracle, open hacker news and read me the top three headlines"*
+> *"Micoracle, use codex to summarize the readme in this project"*
+> *"Micoracle, take a screenshot and tell me what's on my screen"*
 
 ---
 
@@ -161,7 +192,7 @@ sudo apt install wtype wl-clipboard portaudio19-dev python3-dev
 
 | Platform | Command |
 |---|---|
-| macOS Apple Silicon | `pip install mlx-whisper` |
+| macOS Apple Silicon | `pip install "mlx-whisper" "numba>=0.65"` |
 | macOS Intel / Linux / Windows | `pip install faster-whisper` |
 
 ### Step 4 — Pick a cloud STT backend (for commands, optional)
@@ -354,6 +385,9 @@ Grant microphone permission to your terminal. macOS: *Privacy & Security → Mic
 
 **Wake word never fires.**
 Confirm the right mic with `--list-devices`. Say the wake word slowly — fuzzy matching covers common mishears, but very low mic gain can strip initial consonants.
+
+**`Numba needs NumPy 2.3 or less` (MLX backend).**
+An old `numba` (a transitive dep of `mlx-whisper`) is pinned in your environment against a newer NumPy. Upgrade it: `pip install -U "numba>=0.65"`. Installing into a fresh virtualenv avoids this entirely.
 
 **Cloud backend not activating.**
 Check that the API key env var is set in `.env`. Run with `--command-stt-backend <name>` to test explicitly.

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "micoracle"
-version = "1.5.0"
+version = "1.6.0"
 description = "Hands-free voice input for Claude Code, Codex CLI, and any terminal — cross-platform"
 readme = "README.md"
 license = { text = "MIT" }
@@ -50,7 +50,7 @@ dependencies = [
 
 [project.optional-dependencies]
 # Local STT backends
-mlx     = ["mlx-whisper"]
+mlx     = ["mlx-whisper", "numba>=0.65"]
 faster  = ["faster-whisper>=1.0.0"]
 
 # Cloud STT backends
@@ -73,15 +73,21 @@ pro = ["cryptography>=39.0", "pyyaml>=6.0"]
 # macOS menu-bar app (run with `micoracle-app`)
 app = ["rumps>=0.4.0"]
 
-# Jarvis — conversational voice assistant (say "jarvis, …").
-# Provider-agnostic: OpenAI (default) or Anthropic, chosen by JARVIS_PROVIDER
-# or whichever API key is set.
+# MicOracle assistant brain — conversational LLM (say "micoracle, …").
+# Provider-agnostic: OpenAI (default) or Anthropic, chosen by MICORACLE_PROVIDER
+# (legacy JARVIS_PROVIDER honored) or whichever API key is set.
 jarvis = ["openai>=1.0.0", "anthropic>=0.40.0"]
+
+# Agent: real browser automation (after install run: playwright install chromium)
+browser = ["playwright>=1.44"]
+
+# Full voice agent — browser + LLM tool-calling brain (+ claude/codex CLIs if installed)
+agent = ["micoracle[jarvis,browser]"]
 
 # Convenience bundles
 local = ["micoracle[faster,pyttsx3]"]
 cloud = ["micoracle[openai]"]
-all   = ["micoracle[faster,openai,realtime,pyttsx3,pro]"]
+all   = ["micoracle[faster,openai,realtime,pyttsx3,pro,agent]"]
 
 [project.scripts]
 micoracle = "hands_free_voice:main"
@@ -107,4 +113,8 @@ py-modules = [
     "voice_agent",
     "jarvis",
     "control",
+    "browser",
+    "cli_agents",
+    "agent_tools",
+    "agent",
 ]

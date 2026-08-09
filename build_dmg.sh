@@ -11,7 +11,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-VERSION="1.5.0"
+VERSION="1.6.0"
 APP="dist/MicOracle.app"
 DMG="dist/MicOracle-${VERSION}.dmg"
 VENV=".build-venv"

@@ -188,6 +188,14 @@ class VoiceEngine:
             hfv.register_custom_wake_words(hfv.load_custom_wake_words())
         tracker = _analytics.UsageTracker()
         jarvis_agent = _jarvis.make_agent()
+        agent_runner = None
+        try:
+            import agent as _agent
+
+            agent_runner = _agent.make_runner(tts_backend.speak)
+        except Exception as exc:
+            log.warning("agent init failed (%s); assistant runs chat-only", exc)
+        self._agent = agent_runner
 
         ctx = hfv.DispatchContext(
             adapter=adapter,
@@ -197,6 +205,7 @@ class VoiceEngine:
             macros=macro_store,
             tracker=tracker,
             jarvis=jarvis_agent,
+            agent=agent_runner,
         )
 
         self.listen_backend = stt_backend.name
@@ -263,6 +272,10 @@ class VoiceEngine:
                 if not text or hfv.looks_hallucinated(text) or hfv.is_silence_hallucination(text):
                     continue
 
+                # A running agent task consumes answers/confirmations/"stop".
+                if ctx.agent is not None and ctx.agent.feed_user_speech(text):
+                    continue
+
                 armed = wake_state.active_backend()
                 if armed:
                     wake, idx = hfv.detect_wake_word(text)
@@ -314,6 +327,13 @@ class VoiceEngine:
         if not self.running:
             return
         self._stop.set()
+        if getattr(self, "_agent", None) is not None:
+            try:
+                self._agent.abort()
+                self._agent.registry.close()
+            except Exception:
+                pass
+            self._agent = None
         if self._stream is not None:
             try:
                 self._stream.stop()

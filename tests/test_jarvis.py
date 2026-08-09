@@ -44,7 +44,7 @@ class TestAsk:
     def test_system_prompt_passed(self):
         backend = FakeBackend(["hi"])
         jarvis.JarvisAgent(backend=backend).ask("yo")
-        assert "Jarvis" in backend.calls[0]["system"]
+        assert "MicOracle" in backend.calls[0]["system"]
 
     def test_error_rolls_back_history(self):
         agent = jarvis.JarvisAgent(backend=FakeBackend(raise_exc=RuntimeError("boom")))
@@ -75,20 +75,39 @@ class TestProviderResolution:
         monkeypatch.setenv("OPENAI_API_KEY", "x")
         monkeypatch.setenv("ANTHROPIC_API_KEY", "y")
         monkeypatch.delenv("JARVIS_PROVIDER", raising=False)
+        monkeypatch.delenv("MICORACLE_PROVIDER", raising=False)
         assert jarvis._resolve_provider() == "openai"
 
     def test_explicit_override_wins(self, monkeypatch):
         monkeypatch.setenv("OPENAI_API_KEY", "x")
         monkeypatch.setenv("JARVIS_PROVIDER", "anthropic")
+        monkeypatch.delenv("MICORACLE_PROVIDER", raising=False)
+        assert jarvis._resolve_provider() == "anthropic"
+
+    def test_micoracle_provider_beats_jarvis_provider(self, monkeypatch):
+        monkeypatch.setenv("OPENAI_API_KEY", "x")
+        monkeypatch.setenv("JARVIS_PROVIDER", "openai")
+        monkeypatch.setenv("MICORACLE_PROVIDER", "anthropic")
         assert jarvis._resolve_provider() == "anthropic"
 
     def test_none_without_keys(self, monkeypatch):
         monkeypatch.delenv("OPENAI_API_KEY", raising=False)
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
         monkeypatch.delenv("JARVIS_PROVIDER", raising=False)
+        monkeypatch.delenv("MICORACLE_PROVIDER", raising=False)
+        monkeypatch.setattr(jarvis, "_codex_cli_available", lambda: False)
         assert jarvis._resolve_provider() is None
         assert jarvis.is_available() is False
         assert jarvis.make_agent() is None
+
+    def test_codex_fallback_without_keys(self, monkeypatch):
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        monkeypatch.delenv("JARVIS_PROVIDER", raising=False)
+        monkeypatch.delenv("MICORACLE_PROVIDER", raising=False)
+        monkeypatch.setattr(jarvis, "_codex_cli_available", lambda: True)
+        assert jarvis._resolve_provider() == "codex"
+        assert jarvis.is_available() is True
 
 
 class TestOpenAIBackend:
