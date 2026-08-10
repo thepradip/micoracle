@@ -51,15 +51,15 @@ class TestParse:
 @pytest.mark.skipif(sys.platform != "darwin", reason="screencapture is macOS-only")
 class TestExecuteScreenshot:
     def test_screenshot_creates_file(self, monkeypatch, tmp_path):
-        # Point the screenshot at a temp file by faking the home dir path join.
-        target = tmp_path / "shot.png"
-        monkeypatch.setattr(os.path, "expanduser", lambda p: str(target))
+        # Redirect the screenshot folder to a temp dir via the env override.
+        monkeypatch.setenv("MICORACLE_SCREENSHOT_DIR", str(tmp_path))
         result = control.execute(control.Intent("screenshot"))
         assert result.kind == "screenshot"
+        assert result.detail.startswith(str(tmp_path))
         # On CI without a display screencapture may fail; only assert the file
         # when the command reported success.
         if result.ok:
-            assert target.exists()
+            assert list(tmp_path.glob("micoracle-*.png"))
 
 
 class TestRoute:

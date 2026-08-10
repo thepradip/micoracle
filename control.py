@@ -18,6 +18,7 @@ import subprocess
 from dataclasses import dataclass
 from urllib.parse import quote_plus
 
+import paths as _paths
 import platform_adapter as _pa
 
 # Spoken app names → real macOS application names.
@@ -102,9 +103,9 @@ def _run(cmd: list[str]) -> bool:
 def execute(intent: Intent) -> ActionResult:
     k = intent.kind
     if k == "screenshot":
-        path = os.path.expanduser("~/Desktop/micoracle-screenshot.png")
+        path = str(_paths.screenshot_path())
         ok = _run(["screencapture", "-x", path]) and os.path.exists(path)
-        return ActionResult(ok, k, path, "Screenshot saved to your desktop" if ok else "Screenshot failed")
+        return ActionResult(ok, k, path, "Screenshot saved to your Screenshots folder" if ok else "Screenshot failed")
 
     if k == "open_app":
         ok = _run(["open", "-a", intent.arg])

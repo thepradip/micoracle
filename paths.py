@@ -23,3 +23,25 @@ def config_dir() -> Path:
 def config_path(name: str) -> Path:
     """Return a path to ``name`` inside the config directory."""
     return config_dir() / name
+
+
+def screenshot_dir() -> Path:
+    """Folder where screenshots land: ~/Desktop/Screenshots by default.
+
+    Set ``MICORACLE_SCREENSHOT_DIR`` to relocate it. Created on first use.
+    """
+    override = os.environ.get("MICORACLE_SCREENSHOT_DIR", "").strip()
+    base = (
+        Path(override).expanduser() if override
+        else Path.home() / "Desktop" / "Screenshots"
+    )
+    base.mkdir(parents=True, exist_ok=True)
+    return base
+
+
+def screenshot_path(prefix: str = "micoracle") -> Path:
+    """A fresh timestamped .png path inside the screenshot folder."""
+    from datetime import datetime
+
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+    return screenshot_dir() / f"{prefix}-{stamp}.png"

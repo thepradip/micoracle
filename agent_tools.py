@@ -15,12 +15,12 @@ from __future__ import annotations
 import os
 import re
 import subprocess
-import tempfile
 from dataclasses import dataclass
 
 import browser as _browser
 import cli_agents as _cli
 import control as _control
+import paths as _paths
 import platform_adapter as _pa
 
 DESTRUCTIVE_PATTERNS = re.compile(
@@ -216,8 +216,7 @@ class ToolRegistry:
             return self._execute_browser(session, name, args)
 
         if name == "desktop_screenshot":
-            fd, path = tempfile.mkstemp(suffix=".png", prefix="micoracle-screen-")
-            os.close(fd)
+            path = str(_paths.screenshot_path(prefix="micoracle-screen"))
             proc = subprocess.run(
                 ["screencapture", "-x", path], capture_output=True, text=True,
             )
@@ -281,7 +280,7 @@ class ToolRegistry:
             listing = "\n".join(f"- {v}" for v in values[:50])
             return ToolResult(True, f"{len(values)} matches:\n{listing}")
         if name == "browser_screenshot":
-            path = session.screenshot()
+            path = session.screenshot(str(_paths.screenshot_path(prefix="micoracle-browser")))
             return ToolResult(True, f"screenshot saved: {path}", image_path=path)
         return ToolResult(False, f"unknown browser tool: {name}")
 
