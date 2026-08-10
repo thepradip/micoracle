@@ -681,6 +681,17 @@ def main() -> int:
         callback=audio_cb,
     )
     device_info = sd.query_devices(device)
+    # Bluetooth headset mics force the link into telephony mode (HFP, ≤16 kHz,
+    # heavy compression) — Whisper accuracy collapses. Warn loudly.
+    if device_info.get("default_samplerate", 48000) <= 16000:
+        print(
+            f"[warn] Input '{device_info['name']}' runs at "
+            f"{int(device_info['default_samplerate'])} Hz — likely a Bluetooth "
+            "headset mic in telephony mode. Speech recognition will suffer.\n"
+            "       Better: --device \"MacBook Pro Microphone\" (or any wired/"
+            "built-in mic); you can keep listening on the headset.",
+            flush=True,
+        )
 
     print(f"Global VoiceCode ready on {platform.system()} ({platform.machine()}).")
     print(f"  Input device:     {device_info['name']}")
@@ -747,7 +758,17 @@ def _dispatch(ctx: DispatchContext, wake: str, command: str) -> None:
     # app, screenshot, search, type, switch); if it's not a command, converse
     # via the LLM and speak the reply back.
     if wake == "micoracle":
-        action = _control.route(command)
+        # The control layer executes exactly one intent, so compound commands
+        # ("open safari and type hello") skip it and go to the agent's
+        # multi-step loop. A failed control action likewise falls through to
+        # the agent instead of ending as a spoken dead end.
+        action = None
+        if ctx.agent is None or not _control.is_compound(command):
+            action = _control.route(command)
+        if action is not None and not action.ok and ctx.agent is not None:
+            print(f"[micoracle] action {action.kind} failed ({action.detail}); "
+                  "handing to agent", flush=True)
+            action = None
         if action is not None:
             status = "ok" if action.ok else "failed"
             print(f"[micoracle] action {action.kind} ({status}): {action.detail}", flush=True)

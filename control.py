@@ -120,6 +120,29 @@ def parse(command: str) -> Intent | None:
     return None
 
 
+_CLAUSE_SPLIT = re.compile(r"\s+(?:and\s+then|then|and)\s+", re.I)
+
+
+def is_compound(command: str) -> bool:
+    """True when the command chains a control action with further steps.
+
+    The control layer executes exactly one intent, so a chained instruction
+    like "open safari and type hello" must be routed to the multi-step agent
+    instead — otherwise the tail clause is silently swallowed into the first
+    intent's argument. A command is compound when it splits on and/then into
+    clauses of which at least two parse as control actions, or when it uses
+    "then" (an explicit sequencing word) after a leading control action.
+    Single-intent phrases whose argument merely contains "and" ("search for
+    black and white cats") stay non-compound.
+    """
+    parts = [p.strip() for p in _CLAUSE_SPLIT.split(command or "") if p.strip()]
+    if len(parts) < 2 or parse(parts[0]) is None:
+        return False
+    if re.search(r"\bthen\b", command, re.I):
+        return True
+    return any(parse(p) is not None for p in parts[1:])
+
+
 # ─────────────────────────── execute ──────────────────────────────
 
 

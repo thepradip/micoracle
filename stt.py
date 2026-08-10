@@ -79,7 +79,7 @@ class MLXWhisperBackend(STTBackend):
                 str(wav_path),
                 path_or_hf_repo=self.repo,
                 language="en",
-                fp16=False,
+                fp16=True,
                 initial_prompt=WAKE_WORD_PROMPT,
             )
             return " ".join(result.get("text", "").split())

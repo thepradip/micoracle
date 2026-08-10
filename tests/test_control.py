@@ -48,6 +48,29 @@ class TestParse:
         assert control.parse("take a screenshot.") == control.Intent("screenshot")
 
 
+class TestIsCompound:
+    def test_two_control_clauses(self):
+        assert control.is_compound("open safari and type hello world")
+        assert control.is_compound("open the browser and go to github.com")
+
+    def test_then_after_control_action(self):
+        assert control.is_compound("take a screenshot then send it to bob")
+        assert control.is_compound("open safari and then search for python")
+
+    def test_single_intent_with_and_in_argument(self):
+        assert not control.is_compound("search for black and white cats")
+        assert not control.is_compound("type peanut butter and jelly")
+
+    def test_plain_chat_not_compound(self):
+        assert not control.is_compound("what is the capital of France")
+        assert not control.is_compound("tell me a joke and make it short")
+        assert not control.is_compound("")
+
+    def test_single_action_not_compound(self):
+        assert not control.is_compound("open safari")
+        assert not control.is_compound("take a screenshot")
+
+
 @pytest.mark.skipif(sys.platform != "darwin", reason="screencapture is macOS-only")
 class TestExecuteScreenshot:
     def test_screenshot_creates_file(self, monkeypatch, tmp_path):

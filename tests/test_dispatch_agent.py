@@ -94,6 +94,49 @@ class TestMicoracleRouting:
         hfv._dispatch(ctx, "micoracle", "another task")
         assert any("Still working" in s for s in tts.spoken)
 
+    def test_compound_command_skips_control_and_goes_to_agent(self, monkeypatch):
+        runner = FakeRunner()
+        ctx, _, _ = make_ctx(agent=runner)
+        routed = []
+        monkeypatch.setattr(hfv._control, "route", lambda cmd: routed.append(cmd))
+        hfv._dispatch(ctx, "micoracle", "open safari and type hello world")
+        assert routed == []                 # control layer never consulted
+        assert runner.submitted == ["open safari and type hello world"]
+
+    def test_compound_command_without_agent_uses_control(self, monkeypatch):
+        ctx, _, tts = make_ctx(agent=None, jarvis=FakeJarvis())
+        monkeypatch.setattr(
+            hfv._control, "route",
+            lambda cmd: control.ActionResult(True, "open_app", "Safari", "Opening Safari"),
+        )
+        hfv._dispatch(ctx, "micoracle", "open safari and type hello world")
+        assert "Opening Safari" in tts.spoken
+        assert ctx.jarvis.asked == []
+
+    def test_failed_control_action_falls_back_to_agent(self, monkeypatch):
+        runner = FakeRunner()
+        ctx, _, tts = make_ctx(agent=runner)
+        monkeypatch.setattr(
+            hfv._control, "route",
+            lambda cmd: control.ActionResult(
+                False, "open_app", "Hacker News And Read", "I couldn't open that",
+            ),
+        )
+        hfv._dispatch(ctx, "micoracle", "open hacker news and read the headlines")
+        assert runner.submitted == ["open hacker news and read the headlines"]
+        assert "I couldn't open that" not in tts.spoken
+
+    def test_failed_action_without_agent_still_reported(self, monkeypatch):
+        fake_jarvis = FakeJarvis()
+        ctx, _, tts = make_ctx(agent=None, jarvis=fake_jarvis)
+        monkeypatch.setattr(
+            hfv._control, "route",
+            lambda cmd: control.ActionResult(False, "open_app", "Slack", "I couldn't open Slack"),
+        )
+        hfv._dispatch(ctx, "micoracle", "open slack")
+        assert "I couldn't open Slack" in tts.spoken
+        assert fake_jarvis.asked == []
+
     def test_no_agent_falls_back_to_jarvis(self, monkeypatch):
         fake_jarvis = FakeJarvis()
         ctx, _, tts = make_ctx(agent=None, jarvis=fake_jarvis)

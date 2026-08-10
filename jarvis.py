@@ -7,10 +7,12 @@ instead of being pasted into an app, and the reply is spoken back via TTS.
 Provider-agnostic via a small backend abstraction:
   - OpenAI   (default) — Chat Completions, model from MICORACLE_MODEL or "gpt-5.3"
   - Anthropic          — Messages API, model from MICORACLE_MODEL or "claude-opus-4-8"
+  - Local              — any OpenAI-compatible server (Ollama, llama-server,
+                         LM Studio, vLLM) at MICORACLE_BASE_URL; no API key needed
 
-Provider is chosen by MICORACLE_PROVIDER, else inferred from whichever API key
-is set (OpenAI preferred). The legacy JARVIS_PROVIDER / JARVIS_MODEL variables
-are still honored as fallbacks. Thinking/extended reasoning is left at defaults
+Provider is chosen by MICORACLE_PROVIDER, else "local" when MICORACLE_BASE_URL
+is set, else inferred from whichever API key is set (OpenAI preferred). The
+legacy JARVIS_PROVIDER / JARVIS_MODEL variables are still honored as fallbacks. Thinking/extended reasoning is left at defaults
 for low voice latency; the system prompt keeps replies short and speech-friendly.
 """
 
@@ -91,6 +93,101 @@ class _AnthropicBackend:
         return next(
             (b.text for b in resp.content if getattr(b, "type", None) == "text"), ""
         ).strip()
+
+
+DEFAULT_LOCAL_BASE_URL = "http://localhost:11434/v1"   # Ollama's OpenAI-compatible root
+
+
+class _LocalBackend(_OpenAIBackend):
+    """Brain via any OpenAI-compatible local server — Ollama, llama-server,
+    LM Studio, vLLM.
+
+    Point MICORACLE_BASE_URL at the server's /v1 root (default: Ollama on
+    localhost:11434). Local servers usually ignore the API key, so a
+    placeholder is sent unless MICORACLE_API_KEY is set. If MICORACLE_MODEL is
+    unset, the first model the server advertises is used — llama-server serves
+    exactly one, Ollama lists whatever is pulled.
+
+    Tool calling tries native OpenAI-style tools first; a server or model that
+    rejects them falls back to JSON-emulated tool calls (the codex backend's
+    protocol) for the rest of the session. Force one style with
+    MICORACLE_TOOL_STYLE=native|json. In JSON mode screenshots are described
+    but not attached, so prefer a vision-capable model served natively.
+    """
+
+    name = "local"
+
+    def __init__(self, client=None, model: str | None = None) -> None:
+        self.base_url = (
+            os.environ.get("MICORACLE_BASE_URL", "").strip() or DEFAULT_LOCAL_BASE_URL
+        )
+        if client is not None:
+            self.client = client
+        else:
+            from openai import OpenAI  # lazy import
+
+            self.client = OpenAI(
+                base_url=self.base_url,
+                api_key=os.environ.get("MICORACLE_API_KEY", "").strip() or "not-needed",
+            )
+        self.model = model or _model_env("") or self._first_served_model()
+        style = os.environ.get("MICORACLE_TOOL_STYLE", "").strip().lower()
+        self._tool_style = style if style in ("native", "json") else "auto"
+        self._call_seq = 0
+
+    def _first_served_model(self) -> str:
+        try:
+            models = list(self.client.models.list())
+        except Exception as exc:
+            raise RuntimeError(
+                f"Could not reach the local model server at {self.base_url}: {exc}. "
+                "Start the server or set MICORACLE_BASE_URL to its /v1 root."
+            ) from exc
+        if not models:
+            raise RuntimeError(
+                f"The local server at {self.base_url} advertises no models. "
+                "Set MICORACLE_MODEL explicitly."
+            )
+        return models[0].id
+
+    def complete_tools(self, system, messages, tools, max_tokens):
+        if self._tool_style != "json":
+            try:
+                return _openai_complete_tools(self, system, messages, tools, max_tokens)
+            except Exception as exc:
+                if self._tool_style == "native":
+                    raise
+                print(f"[local brain] native tool calling failed ({exc}); "
+                      "switching to JSON-emulated tools", flush=True)
+                self._tool_style = "json"
+        return self._complete_tools_json(system, messages, tools, max_tokens)
+
+    def _complete_tools_json(self, system, messages, tools, max_tokens):
+        import json as _json
+
+        prompt = (
+            f"Available tools (JSON Schema):\n{_json.dumps(tools)}\n\n"
+            f"Conversation so far:\n{_CodexBackend._transcript(messages)}\n\n"
+            f"{_CodexBackend._PROMPT_TAIL}"
+        )
+        raw = self.complete(system, [{"role": "user", "content": prompt}], max_tokens)
+        payload = _CodexBackend._parse_json(raw)
+        if payload is None:
+            # Not JSON — treat the whole reply as a spoken answer, no actions.
+            return raw.strip(), []
+        say = str(payload.get("say", "") or "").strip()
+        calls: list[dict] = []
+        for c in payload.get("tool_calls") or []:
+            if not isinstance(c, dict) or not c.get("name"):
+                continue
+            self._call_seq += 1
+            args = c.get("arguments")
+            calls.append({
+                "id": f"local_call_{self._call_seq}",
+                "name": str(c["name"]),
+                "arguments": args if isinstance(args, dict) else {},
+            })
+        return say, calls
 
 
 class _CodexBackend:
@@ -225,8 +322,10 @@ def _resolve_provider() -> str | None:
         os.environ.get("MICORACLE_PROVIDER", "").strip().lower()
         or os.environ.get("JARVIS_PROVIDER", "").strip().lower()
     )
-    if override in ("openai", "anthropic", "codex"):
+    if override in ("openai", "anthropic", "codex", "local"):
         return override
+    if os.environ.get("MICORACLE_BASE_URL", "").strip():
+        return "local"
     if os.environ.get("OPENAI_API_KEY"):
         return "openai"
     if os.environ.get("ANTHROPIC_API_KEY"):
@@ -243,6 +342,8 @@ def _build_backend(provider: str):
         return _AnthropicBackend()
     if provider == "codex":
         return _CodexBackend()
+    if provider == "local":
+        return _LocalBackend()
     raise ValueError(f"Unknown MicOracle provider: {provider!r}")
 
 
@@ -296,7 +397,7 @@ class JarvisAgent:
 def is_available() -> bool:
     """True if Jarvis can run: a provider key is set and its SDK is importable."""
     provider = _resolve_provider()
-    if provider == "openai":
+    if provider in ("openai", "local"):
         try:
             import openai  # noqa: F401
         except ImportError:
@@ -576,6 +677,8 @@ def make_tool_backend():
             return _AnthropicBackend(model=model)
         if provider == "codex":
             return _CodexBackend(model=model)
+        if provider == "local":
+            return _LocalBackend(model=model)
     except Exception:
         return None
     return None
