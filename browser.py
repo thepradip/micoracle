@@ -63,8 +63,18 @@ class BrowserSession:
         from playwright.sync_api import sync_playwright
 
         self._pw = sync_playwright().start()
-        self._browser = self._pw.chromium.launch(headless=self.headless)
-        self._page = self._browser.new_page()
+        cdp_url = os.environ.get("MICORACLE_BROWSER_CDP_URL", "").strip()
+        if cdp_url:
+            # External CDP engine (e.g. Lightpanda `serve`, a remote Chrome):
+            # far lighter and faster than launching Chromium, but such engines
+            # may not render pixels — screenshot() degrades gracefully.
+            self._browser = self._pw.chromium.connect_over_cdp(cdp_url)
+            context = self._browser.contexts[0] if self._browser.contexts else None
+            pages = context.pages if context is not None else []
+            self._page = pages[0] if pages else self._browser.new_page()
+        else:
+            self._browser = self._pw.chromium.launch(headless=self.headless)
+            self._page = self._browser.new_page()
         self._page.set_default_timeout(DEFAULT_NAV_TIMEOUT_MS)
 
     def close(self) -> None:
@@ -218,11 +228,18 @@ class BrowserSession:
         return values
 
     def screenshot(self, path: str | None = None) -> str:
+        """Returns the saved path, or an error message when the engine cannot
+        render (e.g. Lightpanda via MICORACLE_BROWSER_CDP_URL) — callers check
+        whether the return value equals the requested path."""
         self._ensure_started()
         if path is None:
             fd, path = tempfile.mkstemp(suffix=".png", prefix="micoracle-browser-")
             os.close(fd)
-        self._page.screenshot(path=path)
+        try:
+            self._page.screenshot(path=path)
+        except Exception as exc:
+            return (f"screenshot unavailable ({exc}); "
+                    "verify with browser_read_page instead")
         return path
 
 

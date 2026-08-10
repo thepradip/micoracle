@@ -73,8 +73,16 @@ def _normalize(text: str) -> str:
     return (text or "").strip().lower().rstrip(".!?,")
 
 
+_FILLER_PREFIXES = ("ok", "okay", "please", "hey", "now", "just")
+
+
 def is_stop_phrase(text: str) -> bool:
     t = _normalize(text)
+    # "okay stop it" / "please stop" — spoken commands often lead with filler
+    words = t.split()
+    while words and words[0].strip(",.!?;:") in _FILLER_PREFIXES:
+        words = words[1:]
+    t = " ".join(words)
     return t in _STOP_WORDS or any(t.startswith(w + " ") for w in ("stop", "cancel"))
 
 
@@ -102,8 +110,13 @@ class AgentSession:
     def abort(self) -> None:
         self._abort.set()
 
-    def run(self, instruction: str) -> AgentReport:
-        messages: list[dict] = [{"role": "user", "content": instruction}]
+    def run(self, instruction: str, messages: list[dict] | None = None) -> AgentReport:
+        # In conversation mode the runner passes `messages` seeded with prior
+        # tasks' history; it then already contains `instruction` as its last
+        # user message. Without it, behavior is the classic fresh-task run.
+        if messages is None:
+            messages = [{"role": "user", "content": instruction}]
+        self.messages = messages
         tools = self.registry.specs()
         evidence_nagged = False
 
@@ -205,29 +218,106 @@ def _tool_msg(call: dict, content: str, image_path: str | None = None) -> dict:
     }
 
 
+# ─────────────────── conversation history helpers ─────────────────
+
+HISTORY_CAP = 30  # neutral messages kept between tasks in a conversation
+
+
+def _sanitize_history(messages: list[dict]) -> list[dict]:
+    """Close any assistant tool_calls that never got a tool response.
+
+    run() exits via task_complete without appending a tool result, and an
+    abort can bail mid-way through a call batch. OpenAI rejects a history
+    whose assistant tool_calls lack paired tool messages (and Anthropic
+    rejects dangling tool_use), so a synthetic closure is appended right
+    after each unanswered call before the history is reused.
+    """
+    out: list[dict] = []
+    i = 0
+    while i < len(messages):
+        m = messages[i]
+        out.append(m)
+        i += 1
+        if m.get("role") != "assistant" or not m.get("tool_calls"):
+            continue
+        answered: set = set()
+        while i < len(messages) and messages[i].get("role") == "tool":
+            answered.add(messages[i].get("tool_call_id"))
+            out.append(messages[i])
+            i += 1
+        for c in m["tool_calls"]:
+            if c["id"] not in answered:
+                out.append({
+                    "role": "tool",
+                    "tool_call_id": c["id"],
+                    "name": c["name"],
+                    "content": "(task ended; result was reported to the user)",
+                    "image_path": None,
+                })
+    return out
+
+
+def _trim_history(messages: list[dict], cap: int = HISTORY_CAP) -> list[dict]:
+    """Bound the carried history, cutting only at a user-message boundary.
+
+    A naive front-trim can strand tool responses whose assistant tool_calls
+    message was cut (API 400) and can start the history with a non-user role
+    (Anthropic requires user-first), so after trimming we advance to the next
+    user message.
+    """
+    if len(messages) <= cap:
+        return list(messages)
+    trimmed = messages[-cap:]
+    for i, m in enumerate(trimmed):
+        if m.get("role") == "user":
+            return trimmed[i:]
+    return []
+
+
 class AgentRunner:
-    """Owns one worker thread; the mic thread talks to it via queues."""
+    """Owns one worker thread; the mic thread talks to it via queues.
+
+    Tasks queue (up to MAX_QUEUED) and run sequentially. In conversation mode
+    the runner also carries a shared neutral message history across tasks so
+    follow-up commands can say "there" / "it".
+    """
+
+    MAX_QUEUED = 5
 
     def __init__(self, backend, registry, speak, config: AgentConfig | None = None) -> None:
         self.backend = backend
         self.registry = registry
         self.speak = speak
         self.config = config or AgentConfig()
-        self.busy = False
         self.awaiting_input = False
-        self._tasks: "queue.Queue[str]" = queue.Queue()
+        self._lock = threading.Lock()
+        self._pending = 0                 # queued + running tasks
+        self._tasks: "queue.Queue[str]" = queue.Queue(maxsize=self.MAX_QUEUED)
         self._answers: "queue.Queue[str]" = queue.Queue()
+        self._history: list[dict] = []
+        self._history_lock = threading.Lock()
+        self._history_epoch = 0           # bumped by reset; stale tasks skip commit
         self._session: AgentSession | None = None
         self._thread = threading.Thread(target=self._loop, daemon=True, name="micoracle-agent")
         self._thread.start()
 
+    @property
+    def busy(self) -> bool:
+        with self._lock:
+            return self._pending > 0
+
     # ── called from the STT worker thread ─────────────────────
 
     def submit(self, instruction: str) -> bool:
-        if self.busy:
+        """Queue a task. False only when the queue is full (backlog)."""
+        with self._lock:
+            self._pending += 1            # before put: busy is True on return
+        try:
+            self._tasks.put_nowait(instruction)
+        except queue.Full:
+            with self._lock:
+                self._pending -= 1
             return False
-        self.busy = True
-        self._tasks.put(instruction)
         return True
 
     def feed_user_speech(self, text: str) -> bool:
@@ -235,7 +325,7 @@ class AgentRunner:
         if not self.busy:
             return False
         if is_stop_phrase(text):
-            self.abort()
+            self.cancel_all()
             return True
         if self.awaiting_input:
             self._answers.put(text)
@@ -243,10 +333,36 @@ class AgentRunner:
         return False
 
     def abort(self) -> None:
+        """Abort only the currently running task."""
         if self._session is not None:
             self._session.abort()
         # unblock a pending ask/confirm so the loop can exit promptly
         self._answers.put("stop")
+
+    def cancel_all(self) -> None:
+        """Drop every queued task, then abort the running one."""
+        while True:
+            try:
+                self._tasks.get_nowait()
+            except queue.Empty:
+                break
+            with self._lock:
+                self._pending -= 1
+        self.abort()
+
+    def reset_history(self) -> None:
+        """Forget the conversation context (session ended)."""
+        with self._history_lock:
+            self._history = []
+            self._history_epoch += 1
+
+    def note(self, text: str) -> None:
+        """Record an action done outside the agent loop (control fast path)."""
+        with self._history_lock:
+            self._history.append({
+                "role": "user",
+                "content": f"(voice control action outside the agent: {text})",
+            })
 
     # ── worker thread ──────────────────────────────────────────
 
@@ -262,26 +378,58 @@ class AgentRunner:
     def _loop(self) -> None:
         while True:
             instruction = self._tasks.get()
+            # A prior abort() may have parked a "stop" in _answers with nothing
+            # awaiting; drain so it can't answer this task's first ask_user.
+            while True:
+                try:
+                    self._answers.get_nowait()
+                except queue.Empty:
+                    break
             self._done = threading.Event()
             heartbeat = threading.Thread(target=self._heartbeat, daemon=True)
             heartbeat.start()
             try:
+                with self._history_lock:
+                    seeded = list(self._history)
+                    epoch = self._history_epoch
+                    base_len = len(self._history)
+                seeded.append({"role": "user", "content": instruction})
                 self._session = AgentSession(
                     self.backend, self.registry, self.config,
                     speak=self.speak, confirm=self._confirm, ask_user=self._ask,
                 )
-                report = self._session.run(instruction)
+                report = self._session.run(instruction, messages=seeded)
                 self.speak(report.spoken())
                 print(f"[agent] success={report.success} iterations={report.iterations} "
                       f"summary={report.summary!r} evidence={report.evidence}", flush=True)
+                self._commit_history(seeded, epoch, base_len, report)
             except Exception as exc:
                 self.speak("The agent crashed; details are in the log.")
                 print(f"[agent error] {exc!r}", flush=True)
             finally:
                 self._session = None
-                self.busy = False
                 self.awaiting_input = False
+                with self._lock:
+                    self._pending -= 1
                 self._done.set()
+
+    def _commit_history(self, messages: list[dict], epoch: int, base_len: int,
+                        report: AgentReport) -> None:
+        final = _sanitize_history(messages)
+        for m in final:
+            # old screenshots would be re-read and re-encoded on every later
+            # request; the text description of the result stays
+            if m.get("image_path"):
+                m["image_path"] = None
+        final.append({
+            "role": "user",
+            "content": f"(previous task ended: success={report.success}; {report.summary})",
+        })
+        with self._history_lock:
+            if self._history_epoch == epoch:
+                # keep control-action notes appended while this task was running
+                final.extend(self._history[base_len:])
+                self._history = _trim_history(final)
 
     def _wait_answer(self, prompt: str) -> str | None:
         self.speak(prompt)

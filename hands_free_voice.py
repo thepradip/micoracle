@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import difflib
+import itertools
 import os
 import platform
 import queue
@@ -38,6 +39,7 @@ import platform_adapter as _pa
 import pro
 import stt as _stt
 import tts as _tts
+from agent import is_stop_phrase
 from segmenter import VADSegmenter
 
 
@@ -76,6 +78,10 @@ VAD_AGGRESSIVENESS = 2         # 0-3; higher = stricter silence filtering
 FOLLOWUP_TIMEOUT_SECS = 8.0    # how long to stay armed after a bare wake word
 WAKE_FUZZY_THRESHOLD = 0.78
 CHECK_FIRST_N_WORDS = 3
+
+SESSION_TIMEOUT_SECS = 120.0   # conversation mode ends after this much silence
+ECHO_WINDOW_SECS = 15.0        # our own TTS output is ignored for this long
+ECHO_FUZZY_THRESHOLD = 0.8
 
 WAKE_VARIANTS: dict[str, set[str]] = {
     "claude": {
@@ -247,6 +253,116 @@ class WakeState:
             self.clear()
             return None
         return self._backend
+
+
+# ─────────────────────── conversation session ─────────────────────
+
+
+class ConversationSession:
+    """Conversation mode: after one "micoracle, …" command the mic stays hot —
+    every following utterance is a command, no wake word needed — until a stop
+    phrase or SESSION_TIMEOUT_SECS of inactivity (lazy expiry).
+
+    Only ever touched from the STT worker thread (via handle_utterance /
+    _dispatch), so no lock is needed.
+    """
+
+    def __init__(self, timeout_secs: float = SESSION_TIMEOUT_SECS) -> None:
+        self.timeout = timeout_secs
+        self._expires_at = 0.0
+
+    def start(self) -> None:
+        self._expires_at = time.monotonic() + self.timeout
+
+    def touch(self) -> None:
+        if self.active():
+            self.start()
+
+    def end(self) -> None:
+        self._expires_at = 0.0
+
+    def active(self) -> bool:
+        return time.monotonic() < self._expires_at
+
+
+class EchoGuard:
+    """Remembers recently spoken TTS phrases so the hot mic in a conversation
+    session doesn't transcribe our own voice back into a command.
+
+    speak() happens on the worker, agent, and heartbeat threads — hence the
+    lock.
+    """
+
+    def __init__(self, window_secs: float = ECHO_WINDOW_SECS) -> None:
+        self.window = window_secs
+        self._recent: list[tuple[float, str]] = []
+        self._lock = threading.Lock()
+
+    def note(self, phrase: str) -> None:
+        phrase = (phrase or "").strip().lower()
+        if not phrase:
+            return
+        now = time.monotonic()
+        with self._lock:
+            self._recent = [(t, p) for t, p in self._recent if now - t < self.window]
+            self._recent.append((now, phrase))
+
+    def is_echo(self, text: str) -> bool:
+        t = (text or "").strip().lower().strip(" ,.!?;:")
+        if not t:
+            return False
+        now = time.monotonic()
+        with self._lock:
+            recent = [p for ts, p in self._recent if now - ts < self.window]
+        return any(
+            difflib.SequenceMatcher(None, t, p).ratio() >= ECHO_FUZZY_THRESHOLD
+            for p in recent
+        )
+
+
+class _EchoAwareTTS:
+    """TTS wrapper recording every spoken phrase in the EchoGuard."""
+
+    def __init__(self, inner: _tts.TTSBackend, guard: EchoGuard) -> None:
+        self._inner = inner
+        self.guard = guard
+
+    @property
+    def name(self) -> str:
+        return self._inner.name
+
+    def speak(self, phrase: str) -> None:
+        self.guard.note(phrase)
+        self._inner.speak(phrase)
+
+
+_ACK_BY_VERB = {
+    "search": "Searching.", "find": "Searching.", "look": "Searching.",
+    "google": "Searching.",
+    "open": "Opening.", "go": "Opening.", "visit": "Opening.",
+    "launch": "Opening.", "navigate": "Opening.",
+    "type": "Typing.", "write": "Typing.", "enter": "Typing.",
+    "check": "Checking.", "read": "Checking.", "summarize": "Checking.",
+}
+_ACK_ROTATION = itertools.cycle(("On it.", "Got it.", "Okay."))
+
+
+def ack_for(command: str) -> str:
+    """Zero-latency spoken acknowledgment for an accepted agent task."""
+    words = command.strip().lower().split()
+    first = words[0].strip(",.!?;:") if words else ""
+    return _ACK_BY_VERB.get(first) or next(_ACK_ROTATION)
+
+
+def is_session_noise(text: str) -> bool:
+    """One-word utterances in a hot session are usually stray noise (a cough,
+    a word from the TV) — drop them unless the word alone is a control action
+    ("screenshot"). Answers to agent questions are consumed before this check.
+    """
+    t = text.strip(" ,.!?;:")
+    if len(t.split()) >= 2:
+        return False
+    return _control.parse(t) is None
 
 
 # ──────────────────────── audio / device helpers ──────────────────
@@ -559,6 +675,11 @@ def main() -> int:
         print(f"[warn] TTS backend init failed ({exc}); running silent.", flush=True)
         tts_backend = _tts.SilentTTS()
 
+    # Every spoken phrase is recorded so a hot conversation session can ignore
+    # our own voice coming back through the mic.
+    echo_guard = EchoGuard()
+    tts_backend = _EchoAwareTTS(tts_backend, echo_guard)
+
     # Audio device.
     try:
         device = resolve_input_device(args.device)
@@ -573,6 +694,7 @@ def main() -> int:
     audio_q: queue.Queue[np.ndarray] = queue.Queue()
     utterance_q: queue.Queue[np.ndarray] = queue.Queue()
     wake_state = WakeState()
+    convo = ConversationSession()
 
     # ── Pro features (entitlement-gated; core stays free) ────────────
     entitlement = pro.load_entitlement()
@@ -601,16 +723,19 @@ def main() -> int:
         tracker=tracker,
         jarvis=jarvis_agent,
         agent=agent_runner,
+        session=convo,
+        echo=echo_guard,
     )
 
     def worker() -> None:
         while True:
             pcm = utterance_q.get()
-            # Check armed state BEFORE transcribing so the command backend
-            # (e.g. realtime) is used for the follow-up prompt, not the
-            # continuous-listening utterances.
+            # Armed follow-ups and hot conversation sessions use the command
+            # backend. NOTE: with a paid command STT, every utterance during a
+            # session is billed — the session keeps the mic semantically hot.
             armed = wake_state.active_backend()
-            backend = command_stt if armed else stt_backend
+            use_cmd = armed is not None or convo.active()
+            backend = command_stt if use_cmd else stt_backend
             try:
                 text = backend.transcribe(pcm, SAMPLE_RATE)
             except Exception as exc:
@@ -624,46 +749,7 @@ def main() -> int:
                 continue
             if is_silence_hallucination(text):
                 continue
-
-            # A running agent task gets first claim on speech: answers to its
-            # questions, confirmations, and "stop" are consumed here.
-            if ctx.agent is not None and ctx.agent.feed_user_speech(text):
-                continue
-
-            armed = wake_state.active_backend()
-            if armed:
-                wake, idx = detect_wake_word(text)
-                if wake:
-                    cmd = extract_command(text, idx)
-                    if cmd:
-                        _dispatch(ctx, wake, cmd)
-                        wake_state.clear()
-                    else:
-                        wake_state.arm(wake)
-                        print(f"[{wake}] listening...", flush=True)
-                        tts_backend.speak("listening")
-                    continue
-                cmd = text.strip(" ,.!?;:")
-                if cmd:
-                    _dispatch(ctx, armed, cmd)
-                    wake_state.clear()
-                else:
-                    print(f"[{armed}] empty command, ignored", flush=True)
-                    tts_backend.speak("empty")
-                continue
-
-            wake, idx = detect_wake_word(text)
-            if not wake:
-                print(f"[ignored] {text}", flush=True)
-                continue
-            cmd = extract_command(text, idx)
-            if cmd:
-                _dispatch(ctx, wake, cmd)
-                wake_state.clear()
-            else:
-                wake_state.arm(wake)
-                print(f"[{wake}] listening...", flush=True)
-                tts_backend.speak("listening")
+            handle_utterance(ctx, wake_state, text)
 
     threading.Thread(target=worker, daemon=True).start()
 
@@ -719,7 +805,10 @@ def main() -> int:
     if custom_added:
         say_words += ";  also " + ", ".join(f"'{w}, …'" for w in custom_added)
     print(f"  Say:  {say_words}")
-    print("  (non-wake-word speech is ignored)")
+    print("  Conversation:     one 'micoracle, …' opens a session — keep talking, "
+          "no wake word needed; say 'stop' to end "
+          f"(auto-ends after {int(SESSION_TIMEOUT_SECS)}s of silence)")
+    print("  (non-wake-word speech outside a conversation is ignored)")
     print()
 
     segmenter = VADSegmenter(
@@ -751,6 +840,150 @@ class DispatchContext:
     tracker: "_analytics.UsageTracker | None" = None
     jarvis: "_jarvis.JarvisAgent | None" = None
     agent: "object | None" = None  # agent.AgentRunner (tool-calling), optional
+    session: "ConversationSession | None" = None
+    echo: "EchoGuard | None" = None
+
+
+# ─────────────────────── utterance routing ────────────────────────
+
+
+def handle_utterance(ctx: DispatchContext, wake_state: WakeState, text: str) -> None:
+    """Route one transcribed utterance. Called only from the STT worker thread."""
+    session = ctx.session
+
+    if session is not None and session.active():
+        _handle_session_utterance(ctx, wake_state, session, text)
+        return
+
+    # ── classic flow (no conversation session) ────────────────────
+    # A running agent task gets first claim on speech: answers to its
+    # questions, confirmations, and "stop" are consumed here.
+    if ctx.agent is not None and ctx.agent.feed_user_speech(text):
+        return
+
+    armed = wake_state.active_backend()
+    if armed:
+        _handle_armed_followup(ctx, wake_state, armed, text)
+        return
+
+    wake, idx = detect_wake_word(text)
+    if not wake:
+        print(f"[ignored] {text}", flush=True)
+        return
+    cmd = extract_command(text, idx)
+    if cmd:
+        _dispatch(ctx, wake, cmd)
+        wake_state.clear()
+        _maybe_start_session(ctx, wake)
+    elif wake == "micoracle" and session is not None:
+        # bare "micoracle" opens a conversation session (supersedes the 8-s arm)
+        session.start()
+        print("[micoracle] conversation on — keep talking; say 'stop' to end", flush=True)
+        ctx.tts.speak("listening")
+    else:
+        wake_state.arm(wake)
+        print(f"[{wake}] listening...", flush=True)
+        ctx.tts.speak("listening")
+
+
+def _handle_session_utterance(
+    ctx: DispatchContext, wake_state: WakeState,
+    session: ConversationSession, text: str,
+) -> None:
+    wake, idx = detect_wake_word(text)
+    cmd = extract_command(text, idx) if wake else ""
+
+    # 1 — stop ends the whole conversation. Checked BEFORE feed_user_speech,
+    # which would otherwise swallow "stop" while the agent is busy and the
+    # session would never end.
+    if is_stop_phrase(text) or (wake == "micoracle" and cmd and is_stop_phrase(cmd)):
+        was_busy = ctx.agent is not None and ctx.agent.busy
+        if ctx.agent is not None:
+            ctx.agent.cancel_all()
+            ctx.agent.reset_history()
+        session.end()
+        print("[micoracle] conversation ended", flush=True)
+        if not was_busy:
+            ctx.tts.speak("Stopped.")  # busy: the aborted task's report speaks
+        return
+
+    # 2 — answers/confirmations to a pending agent question
+    if ctx.agent is not None and ctx.agent.feed_user_speech(text):
+        session.touch()
+        return
+
+    # 3 — drop our own TTS coming back through the hot mic, and stray noise
+    if ctx.echo is not None and ctx.echo.is_echo(text):
+        print(f"[echo] {text}", flush=True)
+        return
+    if wake is None and is_session_noise(text):
+        print(f"[noise] {text}", flush=True)
+        return
+
+    # 4 — an armed two-step follow-up (e.g. bare "claude") still wins
+    armed = wake_state.active_backend()
+    if armed:
+        _handle_armed_followup(ctx, wake_state, armed, text)
+        session.touch()
+        return
+
+    # 5 — explicit wake words keep their normal routing
+    if wake:
+        if cmd:
+            _dispatch(ctx, wake, cmd)
+        elif wake == "micoracle":
+            ctx.tts.speak("listening")
+        else:
+            wake_state.arm(wake)
+            print(f"[{wake}] listening...", flush=True)
+            ctx.tts.speak("listening")
+        session.touch()
+        return
+
+    # 6 — no wake word needed: in a conversation everything else is a command
+    _dispatch(ctx, "micoracle", text)
+    session.touch()
+
+
+def _handle_armed_followup(
+    ctx: DispatchContext, wake_state: WakeState, armed: str, text: str,
+) -> None:
+    wake, idx = detect_wake_word(text)
+    if wake:
+        cmd = extract_command(text, idx)
+        if cmd:
+            _dispatch(ctx, wake, cmd)
+            wake_state.clear()
+            _maybe_start_session(ctx, wake)
+        elif wake == "micoracle" and ctx.session is not None:
+            wake_state.clear()
+            ctx.session.start()
+            print("[micoracle] conversation on — keep talking; say 'stop' to end", flush=True)
+            ctx.tts.speak("listening")
+        else:
+            wake_state.arm(wake)
+            print(f"[{wake}] listening...", flush=True)
+            ctx.tts.speak("listening")
+        return
+    cmd = text.strip(" ,.!?;:")
+    if cmd:
+        _dispatch(ctx, armed, cmd)
+        wake_state.clear()
+        _maybe_start_session(ctx, armed)
+    else:
+        print(f"[{armed}] empty command, ignored", flush=True)
+        ctx.tts.speak("empty")
+
+
+def _maybe_start_session(ctx: DispatchContext, wake: str) -> None:
+    """A dispatched micoracle command opens (or refreshes) conversation mode."""
+    if wake != "micoracle" or ctx.session is None:
+        return
+    if not ctx.session.active():
+        ctx.session.start()
+        print("[micoracle] conversation on — keep talking; say 'stop' to end", flush=True)
+    else:
+        ctx.session.touch()
 
 
 def _dispatch(ctx: DispatchContext, wake: str, command: str) -> None:
@@ -758,6 +991,19 @@ def _dispatch(ctx: DispatchContext, wake: str, command: str) -> None:
     # app, screenshot, search, type, switch); if it's not a command, converse
     # via the LLM and speak the reply back.
     if wake == "micoracle":
+        # "micoracle stop" cancels everything instead of being parsed as a
+        # command (the session flow intercepts stop earlier; this covers
+        # non-session dispatches).
+        if is_stop_phrase(command):
+            if ctx.agent is not None and ctx.agent.busy:
+                ctx.agent.cancel_all()  # the aborted task's report speaks
+            else:
+                ctx.tts.speak("Stopped.")
+            if ctx.session is not None and ctx.session.active():
+                ctx.session.end()
+                if ctx.agent is not None:
+                    ctx.agent.reset_history()
+            return
         # The control layer executes exactly one intent, so compound commands
         # ("open safari and type hello") skip it and go to the agent's
         # multi-step loop. A failed control action likewise falls through to
@@ -774,6 +1020,9 @@ def _dispatch(ctx: DispatchContext, wake: str, command: str) -> None:
             print(f"[micoracle] action {action.kind} ({status}): {action.detail}", flush=True)
             if action.speak:
                 ctx.tts.speak(action.speak)
+            if ctx.session is not None and ctx.session.active() and ctx.agent is not None:
+                # let the agent's next task know what happened outside its loop
+                ctx.agent.note(f"{action.kind} {action.detail} ok={action.ok}")
             if ctx.tracker is not None:
                 ctx.tracker.record(
                     wake=wake, text=command, backend=ctx.command_backend,
@@ -782,9 +1031,12 @@ def _dispatch(ctx: DispatchContext, wake: str, command: str) -> None:
             return
         if ctx.agent is not None:
             print(f"[micoracle agent] task: {command}", flush=True)
+            # ack computed before submit() flips busy
+            ack = "Got it — after this one." if ctx.agent.busy else ack_for(command)
             if not ctx.agent.submit(command):
-                ctx.tts.speak("Still working on the last task. Say stop to cancel.")
+                ctx.tts.speak("I'm backed up — say stop to clear the queue.")
                 return
+            ctx.tts.speak(ack)
             if ctx.tracker is not None:
                 ctx.tracker.record(
                     wake=wake, text=command, backend=ctx.command_backend, macro="agent",
@@ -823,9 +1075,12 @@ def _dispatch(ctx: DispatchContext, wake: str, command: str) -> None:
                 f"coding or terminal task, prefer the cli_{wake} tool; "
                 "otherwise just handle it.)"
             )
+            ack = "Got it — after this one." if ctx.agent.busy else ack_for(command)
             if not ctx.agent.submit(instruction):
-                ctx.tts.speak("Still working on the last task. Say stop to cancel.")
-            elif ctx.tracker is not None:
+                ctx.tts.speak("I'm backed up — say stop to clear the queue.")
+                return
+            ctx.tts.speak(ack)
+            if ctx.tracker is not None:
                 ctx.tracker.record(
                     wake=wake, text=command, backend=ctx.command_backend, macro="agent",
                 )

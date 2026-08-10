@@ -177,6 +177,27 @@ export MICORACLE_AGENT_MODEL=qwen2.5:32b
 
 The claude/codex delegation tools switch on automatically when those CLIs are on your PATH.
 
+**Optional: external CDP browser engine** — point the agent's browser at any Chrome-DevTools-Protocol endpoint instead of launching Chromium, e.g. the ultra-light open-source [Lightpanda](https://lightpanda.io) (~9× faster, ~16× less RAM; currently Beta):
+
+```bash
+brew install lightpanda
+lightpanda serve --host 127.0.0.1 --port 9222 &
+export MICORACLE_BROWSER_CDP_URL=ws://127.0.0.1:9222
+```
+
+> Lightpanda doesn't render pixels: `browser_screenshot` reports itself unavailable and the agent verifies with `browser_read_page` instead. Keep the default Chromium for vision-verified or visually watched tasks.
+
+### Conversation mode
+
+One **"Micoracle, …"** opens a conversation — the mic stays hot and every following utterance is a command, no wake word needed:
+
+> *"Micoracle, open hacker news."* → **"Opening."** → *"read me the top headline"* → **"Checking."** → *"search for that on google"* → **"Searching."** → *"stop"* → **"Stopped."**
+
+- Commands spoken while the agent is busy **queue** (up to 5) and run in order — you hear *"Got it — after this one."*
+- Commands in a conversation **share context**: "there", "it", "that page" resolve to earlier steps.
+- End with *"stop"* / *"stop micoracle"* / *"micoracle stop"*, or just stay quiet — the session auto-ends after 2 minutes.
+- The agent's own speech is echo-filtered so it never hears itself as a command.
+
 ---
 
 ## Real-World Use Cases
@@ -369,6 +390,7 @@ See [`.env.example`](./.env.example) for the full commented list.
 | `VOICE_AGENT_TTS_BACKEND` | TTS for status cues (`auto` / `say` / `pyttsx3` / `openai` / `azure` / `none`) |
 | `VOICE_AGENT_TARGET_APP` | Default dispatch target app name |
 | `VOICE_AGENT_INPUT_DEVICE` | Default microphone device (name fragment or numeric id) |
+| `MICORACLE_BROWSER_CDP_URL` | External CDP browser endpoint for the agent (e.g. Lightpanda at `ws://127.0.0.1:9222`); unset = launch Chromium |
 
 ### Local STT knobs
 

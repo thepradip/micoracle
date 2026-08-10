@@ -277,7 +277,11 @@ class ToolRegistry:
             listing = "\n".join(f"- {v}" for v in values[:50])
             return ToolResult(True, f"{len(values)} matches:\n{listing}")
         if name == "browser_screenshot":
-            path = session.screenshot(str(_paths.screenshot_path(prefix="micoracle-browser")))
+            path = str(_paths.screenshot_path(prefix="micoracle-browser"))
+            result = session.screenshot(path)
+            if result != path:
+                # non-rendering CDP engine (e.g. Lightpanda) — no image to attach
+                return ToolResult(False, result)
             return ToolResult(True, f"screenshot saved: {path}", image_path=path)
         return ToolResult(False, f"unknown browser tool: {name}")
 

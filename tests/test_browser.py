@@ -235,3 +235,74 @@ class TestScreenshotAndFactory:
         s.close()
         s.close()
         assert s.started is False
+
+
+class TestScreenshotDegradation:
+    def test_render_failure_returns_message_not_raise(self):
+        page = FakePage()
+
+        def boom(path):
+            raise RuntimeError("not implemented by this engine")
+
+        page.screenshot = boom
+        s = make_started_session(page)
+        result = s.screenshot("/tmp/never-written.png")
+        assert "screenshot unavailable" in result
+        assert "browser_read_page" in result
+
+
+class TestCdpBackend:
+    def _fake_playwright(self, monkeypatch, chromium):
+        import sys
+        from types import SimpleNamespace
+
+        pw = SimpleNamespace(chromium=chromium, stop=lambda: None)
+        mod = SimpleNamespace(
+            sync_playwright=lambda: SimpleNamespace(start=lambda: pw)
+        )
+        monkeypatch.setitem(sys.modules, "playwright.sync_api", mod)
+
+    def test_cdp_env_connects_instead_of_launching(self, monkeypatch):
+        from types import SimpleNamespace
+
+        page = FakePage()
+        page.set_default_timeout = lambda ms: None
+        seen = {}
+
+        class Chromium:
+            def connect_over_cdp(self, url):
+                seen["url"] = url
+                ctx = SimpleNamespace(pages=[page])
+                return SimpleNamespace(contexts=[ctx], close=lambda: None)
+
+            def launch(self, headless):
+                raise AssertionError("must not launch chromium when CDP URL set")
+
+        self._fake_playwright(monkeypatch, Chromium())
+        monkeypatch.setenv("MICORACLE_BROWSER_CDP_URL", "ws://127.0.0.1:9222")
+        s = browser.BrowserSession()
+        s.start()
+        assert seen["url"] == "ws://127.0.0.1:9222"
+        assert s._page is page
+
+    def test_no_cdp_env_launches_chromium(self, monkeypatch):
+        from types import SimpleNamespace
+
+        page = FakePage()
+        page.set_default_timeout = lambda ms: None
+        seen = {}
+
+        class Chromium:
+            def launch(self, headless):
+                seen["headless"] = headless
+                return SimpleNamespace(new_page=lambda: page, close=lambda: None)
+
+            def connect_over_cdp(self, url):
+                raise AssertionError("must not connect when CDP URL unset")
+
+        self._fake_playwright(monkeypatch, Chromium())
+        monkeypatch.delenv("MICORACLE_BROWSER_CDP_URL", raising=False)
+        s = browser.BrowserSession(headless=True)
+        s.start()
+        assert seen["headless"] is True
+        assert s._page is page

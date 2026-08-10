@@ -35,7 +35,8 @@ class FakeSession:
         return ["One", "Two"] if selector == ".title" else []
 
     def screenshot(self, path=None):
-        return "/tmp/fake-shot.png"
+        # real sessions return the requested path on success
+        return path or "/tmp/fake-shot.png"
 
     def close(self):
         self.closed = True
@@ -127,7 +128,17 @@ class TestBrowserDispatch:
     def test_screenshot_sets_image_path(self):
         registry, _ = make_registry()
         result = registry.execute("browser_screenshot", {})
-        assert result.image_path == "/tmp/fake-shot.png"
+        assert result.ok is True
+        assert result.image_path is not None
+        assert result.image_path.endswith(".png")
+
+    def test_screenshot_failure_has_no_image(self):
+        registry, session = make_registry()
+        session.screenshot = lambda path=None: "screenshot unavailable (no renderer)"
+        result = registry.execute("browser_screenshot", {})
+        assert result.ok is False
+        assert result.image_path is None
+        assert "unavailable" in result.content
 
     def test_no_playwright_message(self):
         registry = agent_tools.ToolRegistry(

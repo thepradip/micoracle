@@ -29,14 +29,18 @@ class FakeTTS:
 
 
 class FakeRunner:
-    def __init__(self, busy=False, consumes=False):
+    def __init__(self, busy=False, consumes=False, full=False):
         self.busy = busy
         self.consumes = consumes
+        self.full = full
         self.submitted = []
         self.fed = []
+        self.cancels = 0
+        self.resets = 0
+        self.notes = []
 
     def submit(self, instruction):
-        if self.busy:
+        if self.full:
             return False
         self.submitted.append(instruction)
         return True
@@ -44,6 +48,16 @@ class FakeRunner:
     def feed_user_speech(self, text):
         self.fed.append(text)
         return self.consumes
+
+    def cancel_all(self):
+        self.cancels += 1
+        self.busy = False
+
+    def reset_history(self):
+        self.resets += 1
+
+    def note(self, text):
+        self.notes.append(text)
 
 
 class FakeJarvis:
@@ -55,12 +69,13 @@ class FakeJarvis:
         return "chat reply"
 
 
-def make_ctx(agent=None, jarvis=None, target_app="Terminal", frontmost="Terminal"):
+def make_ctx(agent=None, jarvis=None, target_app="Terminal", frontmost="Terminal",
+             session=None):
     adapter = FakeAdapter(frontmost=frontmost)
     tts = FakeTTS()
     ctx = hfv.DispatchContext(
         adapter=adapter, target_app=target_app, tts=tts,
-        command_backend="mlx", jarvis=jarvis, agent=agent,
+        command_backend="mlx", jarvis=jarvis, agent=agent, session=session,
     )
     return ctx, adapter, tts
 
@@ -87,12 +102,13 @@ class TestMicoracleRouting:
         assert ctx.jarvis.asked == []       # agent replaces plain chat
         assert adapter.pasted == []
 
-    def test_busy_agent_speaks_still_working(self, monkeypatch):
+    def test_busy_agent_queues_with_ack(self, monkeypatch):
         runner = FakeRunner(busy=True)
         ctx, _, tts = make_ctx(agent=runner)
         monkeypatch.setattr(hfv._control, "route", lambda cmd: None)
         hfv._dispatch(ctx, "micoracle", "another task")
-        assert any("Still working" in s for s in tts.spoken)
+        assert runner.submitted == ["another task"]
+        assert any("after this one" in s for s in tts.spoken)
 
     def test_compound_command_skips_control_and_goes_to_agent(self, monkeypatch):
         runner = FakeRunner()
@@ -205,15 +221,75 @@ class TestSmartClaudeCodexRouting:
         assert adapter.pasted == [("hello", "")]
         assert runner.submitted == []
 
-    def test_busy_agent_speaks_still_working(self):
+    def test_busy_agent_queues_with_ack(self):
         runner = FakeRunner(busy=True)
         ctx, adapter, tts = make_ctx(agent=runner, target_app="", frontmost="Safari")
         hfv._dispatch(ctx, "codex", "another task")
         assert adapter.pasted == []
-        assert any("Still working" in s for s in tts.spoken)
+        assert len(runner.submitted) == 1
+        assert any("after this one" in s for s in tts.spoken)
+
+
+class TestAcksAndStops:
+    def test_verb_ack_spoken_exactly_once(self, monkeypatch):
+        runner = FakeRunner()
+        ctx, _, tts = make_ctx(agent=runner)
+        monkeypatch.setattr(hfv._control, "route", lambda cmd: None)
+        hfv._dispatch(ctx, "micoracle", "summarize the front page of hacker news")
+        assert tts.spoken == ["Checking."]
+
+    def test_backlog_warning_when_queue_full(self, monkeypatch):
+        runner = FakeRunner(full=True)
+        ctx, _, tts = make_ctx(agent=runner)
+        monkeypatch.setattr(hfv._control, "route", lambda cmd: None)
+        hfv._dispatch(ctx, "micoracle", "one more thing")
+        assert runner.submitted == []
+        assert any("backed up" in s for s in tts.spoken)
+
+    def test_micoracle_stop_when_idle_speaks_stopped(self):
+        runner = FakeRunner()
+        ctx, _, tts = make_ctx(agent=runner)
+        hfv._dispatch(ctx, "micoracle", "stop")
+        assert "Stopped." in tts.spoken
+        assert runner.submitted == []
+
+    def test_micoracle_stop_when_busy_cancels_all(self):
+        runner = FakeRunner(busy=True)
+        ctx, _, tts = make_ctx(agent=runner)
+        hfv._dispatch(ctx, "micoracle", "stop")
+        assert runner.cancels == 1
+        assert runner.submitted == []
+        assert "Stopped." not in tts.spoken   # aborted task's report speaks
+
+    def test_control_action_noted_during_session(self, monkeypatch):
+        runner = FakeRunner()
+        session = hfv.ConversationSession()
+        session.start()
+        ctx, _, _ = make_ctx(agent=runner, session=session)
+        monkeypatch.setattr(
+            hfv._control, "route",
+            lambda cmd: control.ActionResult(True, "open_app", "Safari", "Opening Safari"),
+        )
+        hfv._dispatch(ctx, "micoracle", "open safari")
+        assert runner.notes and "open_app" in runner.notes[0]
+
+    def test_control_action_not_noted_without_session(self, monkeypatch):
+        runner = FakeRunner()
+        ctx, _, _ = make_ctx(agent=runner, session=None)
+        monkeypatch.setattr(
+            hfv._control, "route",
+            lambda cmd: control.ActionResult(True, "open_app", "Safari", "Opening Safari"),
+        )
+        hfv._dispatch(ctx, "micoracle", "open safari")
+        assert runner.notes == []
 
 
 class TestContextDefaults:
     def test_agent_field_defaults_none(self):
         ctx, _, _ = make_ctx()
         assert ctx.agent is None
+
+    def test_session_and_echo_default_none(self):
+        ctx, _, _ = make_ctx()
+        assert ctx.session is None
+        assert ctx.echo is None
