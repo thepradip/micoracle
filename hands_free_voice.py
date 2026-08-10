@@ -106,6 +106,9 @@ WAKE_VARIANTS: dict[str, set[str]] = {
         # phonetic neighbors
         "miracle", "my miracle", "microcal", "mccorical", "makorical",
         "mikorikal", "my carical", "macoracle", "mecoracle", "michorical",
+        # "mike"-family mishears (whisper-medium.en often hears the name Mike)
+        "mike oracle", "mikeoracle", "mike orical", "mike o'racle",
+        "make oracle", "mick orical", "mic recall", "mike recall",
     },
 }
 
@@ -780,6 +783,32 @@ def _dispatch(ctx: DispatchContext, wake: str, command: str) -> None:
                 wake=wake, text=command, backend=ctx.command_backend, macro="assistant",
             )
         return
+
+    # Smart routing for "claude, …" / "codex, …": dictate when a terminal is
+    # focused (or a target is pinned) — otherwise there is nothing sensible to
+    # paste into, so hand the task to the agent, which runs the matching CLI
+    # headlessly and speaks the result. Whisper hears "claude"/"codex" far more
+    # reliably than "micoracle", so this doubles as a robust agent trigger.
+    if ctx.agent is not None and not ctx.target_app:
+        try:
+            frontmost = ctx.adapter.get_frontmost_app()
+        except Exception:
+            frontmost = None  # e.g. Wayland — keep classic dictation behavior
+        if frontmost is not None and frontmost not in ctx.adapter.supported_apps:
+            print(f"[{wake} agent] task: {command} "
+                  f"(frontmost {frontmost!r} is not a dictation target)", flush=True)
+            instruction = (
+                f"{command}\n(The user addressed this to '{wake}'. If it is a "
+                f"coding or terminal task, prefer the cli_{wake} tool; "
+                "otherwise just handle it.)"
+            )
+            if not ctx.agent.submit(instruction):
+                ctx.tts.speak("Still working on the last task. Say stop to cancel.")
+            elif ctx.tracker is not None:
+                ctx.tracker.record(
+                    wake=wake, text=command, backend=ctx.command_backend, macro="agent",
+                )
+            return
 
     # Pro: expand a matching voice macro into its full prompt template.
     macro_name: str | None = None

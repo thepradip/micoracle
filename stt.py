@@ -41,6 +41,15 @@ class STTBackend(ABC):
 # ───────────────────── Local: MLX Whisper ─────────────────────────
 
 
+# Bias the Whisper decoder toward the wake words. "Micoracle" is an invented
+# word Whisper has never seen in training, so without this hint it snaps to
+# the nearest real phrases ("Meek Oracle", "Mike what I", "kinetics").
+WAKE_WORD_PROMPT = (
+    "Voice commands for the MicOracle assistant. Commands start with the wake "
+    "words Micoracle, Claude, or Codex. Example: Micoracle, take a screenshot."
+)
+
+
 class MLXWhisperBackend(STTBackend):
     name = "mlx"
 
@@ -71,6 +80,7 @@ class MLXWhisperBackend(STTBackend):
                 path_or_hf_repo=self.repo,
                 language="en",
                 fp16=False,
+                initial_prompt=WAKE_WORD_PROMPT,
             )
             return " ".join(result.get("text", "").split())
         finally:
@@ -115,6 +125,7 @@ class FasterWhisperBackend(STTBackend):
             audio_f32 = _resample_linear(audio_f32, up, down)
         segments, _info = self._model.transcribe(
             audio_f32, language="en", beam_size=1, vad_filter=False,
+            initial_prompt=WAKE_WORD_PROMPT,
         )
         return " ".join(s.text.strip() for s in segments).strip()
 

@@ -7,11 +7,17 @@ import hands_free_voice as hfv
 class FakeAdapter:
     supported_apps = {"Terminal"}
 
-    def __init__(self):
+    def __init__(self, frontmost="Terminal"):
         self.pasted = []
+        self.frontmost = frontmost
 
     def paste_and_return(self, text, target):
         self.pasted.append((text, target))
+
+    def get_frontmost_app(self):
+        if isinstance(self.frontmost, Exception):
+            raise self.frontmost
+        return self.frontmost
 
 
 class FakeTTS:
@@ -49,11 +55,11 @@ class FakeJarvis:
         return "chat reply"
 
 
-def make_ctx(agent=None, jarvis=None):
-    adapter = FakeAdapter()
+def make_ctx(agent=None, jarvis=None, target_app="Terminal", frontmost="Terminal"):
+    adapter = FakeAdapter(frontmost=frontmost)
     tts = FakeTTS()
     ctx = hfv.DispatchContext(
-        adapter=adapter, target_app="Terminal", tts=tts,
+        adapter=adapter, target_app=target_app, tts=tts,
         command_backend="mlx", jarvis=jarvis, agent=agent,
     )
     return ctx, adapter, tts
@@ -110,6 +116,58 @@ class TestDictationRegression:
         ctx, adapter, _ = make_ctx(agent=FakeRunner())
         hfv._dispatch(ctx, "codex", "run the tests")
         assert adapter.pasted == [("run the tests", "Terminal")]
+
+
+class TestSmartClaudeCodexRouting:
+    def test_terminal_focused_dictates(self):
+        runner = FakeRunner()
+        ctx, adapter, _ = make_ctx(agent=runner, target_app="", frontmost="Terminal")
+        hfv._dispatch(ctx, "claude", "fix the bug")
+        assert adapter.pasted == [("fix the bug", "")]
+        assert runner.submitted == []
+
+    def test_non_terminal_focused_goes_to_agent(self):
+        runner = FakeRunner()
+        ctx, adapter, _ = make_ctx(agent=runner, target_app="", frontmost="Safari")
+        hfv._dispatch(ctx, "claude", "summarize the readme")
+        assert adapter.pasted == []
+        assert len(runner.submitted) == 1
+        assert runner.submitted[0].startswith("summarize the readme")
+        assert "cli_claude" in runner.submitted[0]
+
+    def test_codex_task_prefers_codex_cli(self):
+        runner = FakeRunner()
+        ctx, _, _ = make_ctx(agent=runner, target_app="", frontmost="Finder")
+        hfv._dispatch(ctx, "codex", "run the test suite")
+        assert "cli_codex" in runner.submitted[0]
+
+    def test_pinned_target_always_dictates(self):
+        runner = FakeRunner()
+        ctx, adapter, _ = make_ctx(agent=runner, target_app="Terminal", frontmost="Safari")
+        hfv._dispatch(ctx, "claude", "hello")
+        assert adapter.pasted == [("hello", "Terminal")]
+        assert runner.submitted == []
+
+    def test_no_agent_falls_back_to_dictation(self):
+        ctx, adapter, _ = make_ctx(agent=None, target_app="", frontmost="Safari")
+        hfv._dispatch(ctx, "claude", "hello")
+        assert adapter.pasted == [("hello", "")]
+
+    def test_frontmost_error_falls_back_to_dictation(self):
+        runner = FakeRunner()
+        ctx, adapter, _ = make_ctx(
+            agent=runner, target_app="", frontmost=RuntimeError("wayland"),
+        )
+        hfv._dispatch(ctx, "claude", "hello")
+        assert adapter.pasted == [("hello", "")]
+        assert runner.submitted == []
+
+    def test_busy_agent_speaks_still_working(self):
+        runner = FakeRunner(busy=True)
+        ctx, adapter, tts = make_ctx(agent=runner, target_app="", frontmost="Safari")
+        hfv._dispatch(ctx, "codex", "another task")
+        assert adapter.pasted == []
+        assert any("Still working" in s for s in tts.spoken)
 
 
 class TestContextDefaults:
