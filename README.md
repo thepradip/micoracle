@@ -2,11 +2,12 @@
 
 <img src="./logo.svg" alt="micoracle" width="400"/>
 
-### Stop typing your AI prompts. Just say them.
+### Talk to your computer. It talks back — and gets things done.
 
-**Hands-free voice input for Claude Code, Codex CLI, and any terminal — macOS · Linux · Windows**
+**A hands-free voice assistant that dictates into any terminal, browses the web, runs coding agents, and verifies its own work — macOS · Linux · Windows**
 
-Say *"Micoracle, refactor this function"* → transcribed → pasted into your terminal → Enter pressed. No push-to-talk. No cloud required.
+Say *"Claude, refactor this function"* → typed into your terminal, Enter pressed.
+Say *"Micoracle, open hacker news and read me the top headlines"* → a real browser opens, scrapes the page, and the answer is **spoken back to you**. No push-to-talk. No cloud required. No API keys required.
 
 [![PyPI version](https://img.shields.io/pypi/v/micoracle.svg?style=flat-square)](https://pypi.org/project/micoracle/)
 [![PyPI Downloads](https://img.shields.io/pypi/dm/micoracle?style=flat-square&color=brightgreen)](https://pypi.org/project/micoracle/)
@@ -53,6 +54,8 @@ run_hands_free.bat         # Windows
 | Push-to-talk or browser extension | Always-on wake-word listener |
 | Cloud-only transcription | 100% offline on Apple Silicon & CPU |
 | Locked to one tool | Works with any terminal app |
+| An assistant that *claims* it did something | An agent that **proves** it — every action verified with evidence |
+| Pay-per-token API keys | Runs on your existing ChatGPT login via the codex CLI — zero keys |
 
 Works with **[Claude Code](https://claude.ai/code)** · **[OpenAI Codex CLI](https://github.com/openai/codex)** · **[OpenCode](https://github.com/sst/opencode)** · **iTerm2 · Warp · VS Code terminal · Windows Terminal**
 
@@ -72,6 +75,10 @@ Works with **[Claude Code](https://claude.ai/code)** · **[OpenAI Codex CLI](htt
 | 🚫 | **Hallucination filter** | Whisper artifacts like *"Thank you."* / *"Amen."* silently dropped |
 | 🔒 | **Target-aware dispatch** | macOS / Windows reactivate the startup target; Linux dispatches to focused window |
 | 📋 | **Clipboard-conscious** | Original clipboard contents restored immediately after each dispatch |
+| 🤖 | **Voice agent** | *"Micoracle, …"* drives a real browser, takes screenshots, delegates to Claude Code / Codex — and speaks results back |
+| ✅ | **Evidence or it didn't happen** | The agent cannot claim success without proof: HTTP statuses, read-backs, exit codes, vision-checked screenshots |
+| 🛡️ | **Spoken confirmation gate** | Buy / delete / send / submit actions wait for your spoken *"yes"* |
+| 🗝️ | **Zero-key brain option** | GPT via your codex CLI login, or bring OpenAI / Anthropic / any OpenAI-compatible local model |
 
 ---
 
@@ -118,44 +125,105 @@ All three support **fuzzy mishear tolerance** — common STT splits like *"Mic O
 
 ## The MicOracle Agent
 
-`micoracle, <do something>` is a real voice-driven agent, not just dictation. It routes in three layers:
+Saying **"Micoracle, …"** doesn't type anything — it *does* things. Your words go through three layers, fastest first:
 
-1. **Instant control actions** (offline, no LLM): *"take a screenshot"*, *"open Safari"*, *"switch to VS Code"*, *"search for rust lifetimes"*.
-2. **Agent tasks** (LLM tool loop): everything else runs through a tool-calling brain that can drive a real Chromium browser (navigate, click, fill, scrape, screenshot), take desktop screenshots, and delegate coding work to the **Claude Code** or **Codex** CLIs headlessly — then speaks the result.
-3. **Chat fallback**: if the agent isn't installed, plain questions still get spoken answers.
-
-What makes it robust:
-
-- **Asks before guessing** — ambiguous instructions trigger a spoken question; answer by voice.
-- **Verifies every step** — page read-backs, HTTP statuses, input read-backs, CLI exit codes; screenshots are fed back into the model so it *sees* the state. A task can only claim success with evidence; otherwise it reports failure honestly.
-- **Confirmation gate** — destructive-sounding actions (buy, delete, send, submit, …) require you to say *"yes"* first.
-- **Interruptible** — say *"stop"* or *"cancel"* any time to abort; you'll get an honest partial report.
-
-Setup:
-
-```bash
-pip install "micoracle[agent]"      # LLM SDKs + Playwright
-playwright install chromium         # one-time browser download
-export ANTHROPIC_API_KEY=...        # or OPENAI_API_KEY (MICORACLE_PROVIDER picks)
+```
+"Micoracle, take a screenshot"        →  instant offline action (~1 s, no LLM)
+"Micoracle, open hacker news and      →  agent: LLM plans → tools act → result
+ read me the top three headlines"        is verified → answer is spoken back
+"Micoracle, what's the capital        →  plain spoken answer
+ of France?"
 ```
 
-The claude/codex tools activate automatically when those CLIs are on your PATH. Try:
+**Layer 1 — instant actions** (offline, works with zero setup): screenshots, opening and focusing apps, opening URLs, web searches, typing text. On every OS.
 
-> *"Micoracle, open hacker news and read me the top three headlines"*
-> *"Micoracle, use codex to summarize the readme in this project"*
-> *"Micoracle, take a screenshot and tell me what's on my screen"*
+**Layer 2 — the agent.** A tool-calling LLM that can:
+
+- 🌐 **Drive a real browser** — navigate, click, fill forms, read pages, scrape data, screenshot (its own Chromium; your browser is untouched)
+- 👀 **See your screen** — takes screenshots and actually looks at them (vision)
+- 💻 **Delegate coding work** — runs **Claude Code** or **Codex** headlessly on real tasks and reports the outcome with exit codes
+- 🗣️ **Talk it through** — asks a clarifying question out loud when your instruction is ambiguous; you answer by voice; say *"stop"* any time
+
+**Layer 3 — honesty, enforced by code, not vibes:**
+
+- The agent **cannot say "done" without evidence** — the loop rejects any success claim that isn't backed by an observed fact (final URL + HTTP status, an input read-back, a CLI exit code, a vision-checked screenshot).
+- Destructive-sounding actions (**buy, delete, send, submit, pay…**) are held until you say *"yes"* out loud — a regex gate that runs whether or not the model flags them.
+- If something fails, you hear exactly what failed and what was observed instead.
+
+### Agent setup — pick your brain
+
+**Option A: zero API keys** *(recommended if you already use the codex CLI)* — the agent runs GPT through your existing ChatGPT login:
+
+```bash
+pip install "micoracle[agent]"
+playwright install chromium         # one-time browser download
+# that's it — if `codex` is on your PATH, the brain just works
+```
+
+**Option B: API keys** — OpenAI or Anthropic, full native tool-calling:
+
+```bash
+export OPENAI_API_KEY=...           # or ANTHROPIC_API_KEY
+export MICORACLE_PROVIDER=openai    # optional; auto-detected from keys
+```
+
+**Option C: open-source / self-hosted** — any OpenAI-compatible server (Ollama, llama.cpp, vLLM, LM Studio) whose model supports tool calling:
+
+```bash
+export OPENAI_BASE_URL=http://localhost:11434/v1
+export OPENAI_API_KEY=local
+export MICORACLE_AGENT_MODEL=qwen2.5:32b
+```
+
+The claude/codex delegation tools switch on automatically when those CLIs are on your PATH.
+
+---
+
+## Real-World Use Cases
+
+**🌅 The morning briefing** — while making coffee:
+> *"Micoracle, open hacker news and read me the top three headlines."*
+> The agent opens its browser, scrapes the front page, and reads them to you. Verified against the live page — it can't invent headlines, because the loop demands scraped evidence before it may answer.
+
+**🧑‍💻 Hands-free pair programming** — your hands stay on one keyboard while agents work in another window:
+> *"Claude, write unit tests for the parser module."* → dictated straight into Claude Code.
+> *"Codex, run the test suite and fix what breaks."* → dictated into Codex.
+> Pro tier: say *"Codex, ship it"* and a voice macro expands into your full review-and-commit prompt.
+
+**🦾 Accessibility & RSI relief** — the whole flow works without touching the keyboard: dictation into any terminal, spoken answers back, apps opened and focused by voice. Local STT means it works offline, on a plane, with zero per-word cost.
+
+**🔍 Voice-driven research** — mid-task, without switching windows:
+> *"Micoracle, look up the Python 3.13 release notes and tell me what changed in asyncio."*
+> The browser navigates, reads, and summarizes out loud while you keep coding.
+
+**🤝 Delegate-and-forget coding tasks:**
+> *"Micoracle, use codex to summarize the readme in this project."*
+> *"Micoracle, ask claude to find and fix the failing test."*
+> The agent runs the CLI headlessly, waits, and speaks the result — with the exit code as proof it actually ran.
+
+**🖥️ "What am I looking at?"** — screen awareness on demand:
+> *"Micoracle, take a screenshot and tell me what's on my screen."*
+> The screenshot is saved to `~/Desktop/Screenshots/` and the model describes what it *actually sees* in the image.
+
+**🛒 Safe web actions** — the confirmation gate in practice:
+> *"Micoracle, fill the contact form with my name and submit it."*
+> Filling happens (with read-back verification); the **submit click stops and asks you out loud** before anything irreversible happens. Say "no" and it stands down.
 
 ---
 
 ## Platform & Backend Matrix
 
-| Platform | STT (listening) | STT (command) | TTS | Focus & paste |
-|---|---|---|---|---|
-| macOS Apple Silicon | `mlx` | your choice | `say` | AppleScript |
-| macOS Intel | `faster` | your choice | `say` | AppleScript |
-| Linux X11 | `faster` | your choice | `pyttsx3` | `xdotool type` |
-| Linux Wayland | `faster` | your choice | `pyttsx3` | `wtype` + `wl-copy` |
-| Windows 10/11 | `faster` | your choice | `pyttsx3` | pywin32 + pyautogui |
+| Platform | STT (listening) | TTS | Focus & paste | Screenshot | App launch/focus | Agent (browser + CLIs) |
+|---|---|---|---|---|---|---|
+| macOS Apple Silicon | `mlx` | `say` | AppleScript | `screencapture` | `open -a` / AppleScript | ✓ |
+| macOS Intel | `faster` | `say` | AppleScript | `screencapture` | `open -a` / AppleScript | ✓ |
+| Linux X11 | `faster` | `pyttsx3` | `xdotool type` | gnome-screenshot / scrot / import | `$PATH` / `gtk-launch` + `xdotool` | ✓ |
+| Linux Wayland | `faster` | `pyttsx3` | `wtype` + `wl-copy` | `grim` / spectacle | `$PATH` / `gtk-launch` | ✓ |
+| Windows 10/11 | `faster` | `pyttsx3` | pywin32 + pyautogui | PowerShell CopyFromScreen | `Start-Process` / AppActivate | ✓ |
+
+The browser agent (Playwright) and the claude/codex delegation run identically on all three OSes; URLs and web searches use Python's stdlib `webbrowser` everywhere.
+
+> Status note: the macOS column is verified end-to-end on real hardware (including live voice). The Linux and Windows action paths are implemented and unit-tested, but not yet live-tested — reports welcome.
 
 ---
 
@@ -254,9 +322,13 @@ GROQ_API_KEY=gsk_...
 run_hands_free.bat           # Windows
 ```
 
-**One-shot:** *"Micoracle, write a Python hello world."* → pasted with Enter.
+**Dictate:** *"Claude, write a Python hello world."* → typed into the focused terminal, Enter pressed.
 
-**Two-step:** *"Micoracle."* → hear *"listening"* → say prompt within 8 s → pasted.
+**Act:** *"Micoracle, take a screenshot."* → done in a second, saved to `~/Desktop/Screenshots/`, confirmed out loud.
+
+**Agent:** *"Micoracle, open hacker news and read me the top three headlines."* → browser opens, page is scraped, headlines are spoken back (needs the [agent setup](#agent-setup--pick-your-brain)).
+
+**Two-step:** say just the wake word → hear *"listening"* → speak within 8 s.
 
 **Override backends at launch:**
 ```bash
@@ -342,6 +414,19 @@ See [`.env.example`](./.env.example) for the full commented list.
 | `AZURE_SPEECH_REGION` | Azure Speech TTS region (e.g. `eastus`) |
 | `VOICE_AGENT_AZURE_TTS_VOICE` | Azure TTS voice (default: `en-US-AriaNeural`) |
 | `HF_HUB_ENABLE_HF_TRANSFER` | Set to `1` for faster HuggingFace model downloads |
+
+### Agent (the "Micoracle, …" brain)
+
+| Variable | Purpose |
+|---|---|
+| `MICORACLE_PROVIDER` | Brain provider: `openai` \| `anthropic` \| `codex` (default: auto — keys first, codex CLI as zero-key fallback) |
+| `MICORACLE_MODEL` | Chat model override (both chat and agent) |
+| `MICORACLE_AGENT_MODEL` | Agent-loop model override (wins over `MICORACLE_MODEL`) |
+| `MICORACLE_AGENT_CWD` | Working directory for delegated claude/codex tasks |
+| `MICORACLE_AGENT_MAX_STEPS` | Max tool-loop iterations per task (default: 15) |
+| `MICORACLE_BROWSER_HEADLESS` | `1` = invisible agent browser (default: headed, so you can watch it work) |
+| `MICORACLE_SCREENSHOT_DIR` | Where screenshots are saved (default: `~/Desktop/Screenshots`) |
+| `OPENAI_BASE_URL` | Point the `openai` provider at any compatible server (Ollama, llama.cpp, vLLM…) |
 
 ---
 
@@ -485,7 +570,8 @@ estimates are local-only.
 
 - **Stronger Linux target locking:** closer to macOS / Windows target reactivation behaviour
 - **Packaged installers:** smoother setup with platform-specific dependency checks
-- **Tray / menu bar control:** pause, resume, backend selection, target status
+- **Live Linux/Windows agent validation:** the cross-platform action paths are implemented and unit-tested; real-hardware runs are next
+- **Mouse & hotkey control:** clicks and arbitrary keys for deeper desktop automation
 - **Command history:** optional local log of recent accepted prompts
 - **Google Gemini STT:** cloud transcription backend
 - **Team config sync:** push a shared macro / wake-word config across a team (Team tier)

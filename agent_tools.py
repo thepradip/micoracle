@@ -12,9 +12,7 @@ and a regex gate runs regardless — belt and braces.
 
 from __future__ import annotations
 
-import os
 import re
-import subprocess
 from dataclasses import dataclass
 
 import browser as _browser
@@ -217,11 +215,10 @@ class ToolRegistry:
 
         if name == "desktop_screenshot":
             path = str(_paths.screenshot_path(prefix="micoracle-screen"))
-            proc = subprocess.run(
-                ["screencapture", "-x", path], capture_output=True, text=True,
-            )
-            if proc.returncode != 0 or not os.path.getsize(path):
-                return ToolResult(False, f"screencapture failed (exit {proc.returncode})")
+            if not _control.take_screenshot(path):
+                return ToolResult(
+                    False, "screenshot failed — no screenshot tool available on this OS?"
+                )
             return ToolResult(True, f"screenshot saved: {path}", image_path=path)
 
         if name in ("desktop_open_app", "desktop_focus_app", "desktop_open_url"):

@@ -62,6 +62,65 @@ class TestExecuteScreenshot:
             assert list(tmp_path.glob("micoracle-*.png"))
 
 
+class TestCrossPlatform:
+    def test_mac_screenshot_argv(self, monkeypatch):
+        monkeypatch.setattr(control.sys, "platform", "darwin")
+        assert control._screenshot_argv("/tmp/x.png") == ["screencapture", "-x", "/tmp/x.png"]
+
+    def test_linux_screenshot_first_available_tool(self, monkeypatch):
+        monkeypatch.setattr(control.sys, "platform", "linux")
+        monkeypatch.setattr(control.shutil, "which",
+                            lambda t: "/usr/bin/scrot" if t == "scrot" else None)
+        assert control._screenshot_argv("/tmp/x.png") == ["scrot", "/tmp/x.png"]
+
+    def test_linux_screenshot_no_tool(self, monkeypatch):
+        monkeypatch.setattr(control.sys, "platform", "linux")
+        monkeypatch.setattr(control.shutil, "which", lambda t: None)
+        assert control._screenshot_argv("/tmp/x.png") is None
+        assert control.take_screenshot("/tmp/x.png") is False
+
+    def test_windows_screenshot_uses_powershell(self, monkeypatch):
+        monkeypatch.setattr(control.sys, "platform", "win32")
+        argv = control._screenshot_argv("C:/tmp/x.png")
+        assert argv[0] == "powershell"
+        assert "CopyFromScreen" in argv[-1]
+
+    def test_windows_open_app_uses_start_process(self, monkeypatch):
+        monkeypatch.setattr(control.sys, "platform", "win32")
+        calls = []
+        monkeypatch.setattr(control, "_run", lambda cmd: calls.append(cmd) or True)
+        assert control._open_app("notepad") is True
+        assert "Start-Process 'notepad'" in calls[0][-1]
+
+    def test_linux_focus_needs_xdotool(self, monkeypatch):
+        monkeypatch.setattr(control.sys, "platform", "linux")
+        monkeypatch.setattr(control.shutil, "which", lambda t: None)
+        assert control._focus_app("firefox") is False
+
+    def test_linux_focus_with_xdotool(self, monkeypatch):
+        monkeypatch.setattr(control.sys, "platform", "linux")
+        monkeypatch.setattr(control.shutil, "which",
+                            lambda t: "/usr/bin/xdotool" if t == "xdotool" else None)
+        calls = []
+        monkeypatch.setattr(control, "_run", lambda cmd: calls.append(cmd) or True)
+        assert control._focus_app("firefox") is True
+        assert calls[0][:3] == ["xdotool", "search", "--name"]
+
+    def test_open_url_uses_webbrowser(self, monkeypatch):
+        opened = []
+        monkeypatch.setattr(control.webbrowser, "open", lambda u: opened.append(u) or True)
+        result = control.execute(control.Intent("open_url", "example.com"))
+        assert result.ok is True
+        assert opened == ["https://example.com"]
+
+    def test_web_search_uses_webbrowser(self, monkeypatch):
+        opened = []
+        monkeypatch.setattr(control.webbrowser, "open", lambda u: opened.append(u) or True)
+        result = control.execute(control.Intent("web_search", "rust lifetimes"))
+        assert result.ok is True
+        assert "google.com/search?q=rust+lifetimes" in opened[0]
+
+
 class TestRoute:
     def test_route_returns_none_for_noncommand(self):
         assert control.route("tell me a joke") is None
