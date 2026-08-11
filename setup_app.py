@@ -95,8 +95,8 @@ PLIST = {
     "CFBundleName": "MicOracle",
     "CFBundleDisplayName": "MicOracle",
     "CFBundleIdentifier": "com.thepradip.micoracle",
-    "CFBundleShortVersionString": "1.6.0",
-    "CFBundleVersion": "1.6.0",
+    "CFBundleShortVersionString": "1.7.0",
+    "CFBundleVersion": "1.7.0",
     "LSMinimumSystemVersion": "12.0",
     # Menu-bar only — no dock icon, no main window.
     "LSUIElement": True,

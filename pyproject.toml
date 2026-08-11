@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "micoracle"
-version = "1.6.0"
+version = "1.7.0"
 description = "Hands-free voice assistant + agent: dictate into any terminal, browse the web, run Claude Code/Codex, verify results — cross-platform"
 readme = "README.md"
 license = { text = "MIT" }

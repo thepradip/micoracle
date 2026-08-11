@@ -63,7 +63,7 @@ _load_dotenv(Path(__file__).resolve().parent / ".env")
 # ──────────────────────────── constants ───────────────────────────
 
 
-_VERSION = "1.6.0"
+_VERSION = "1.7.0"
 
 SAMPLE_RATE = 16000
 FRAME_MS = 30
