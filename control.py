@@ -20,6 +20,7 @@ dictation ("claude, open the config file") is never mistaken for a command.
 
 from __future__ import annotations
 
+import difflib
 import os
 import re
 import shutil
@@ -32,27 +33,48 @@ from urllib.parse import quote_plus
 import paths as _paths
 import platform_adapter as _pa
 
-# Spoken app names → real application names, per OS.
+# Spoken app names → real application names, per OS. Includes common Whisper
+# mishears ("versus code", "what's app") — the same trick as WAKE_VARIANTS.
+_VSCODE_MISHEARS = ("vs code", "vscode", "vs. code", "versus code", "the s code")
+_WHATSAPP_MISHEARS = ("whatsapp", "whats app", "what's app", "watts app", "bots app")
+
 _MAC_ALIASES = {
     "browser": "Safari", "the browser": "Safari", "safari": "Safari",
     "chrome": "Google Chrome", "google chrome": "Google Chrome",
     "terminal": "Terminal", "iterm": "iTerm", "warp": "Warp",
     "text editor": "TextEdit", "textedit": "TextEdit", "notes": "Notes",
-    "vs code": "Visual Studio Code", "vscode": "Visual Studio Code",
     "code": "Visual Studio Code", "finder": "Finder", "mail": "Mail",
     "calendar": "Calendar", "music": "Music", "spotify": "Spotify",
+    "slack": "Slack", "discord": "Discord", "telegram": "Telegram",
+    "zoom": "zoom.us", "teams": "Microsoft Teams", "edge": "Microsoft Edge",
+    "firefox": "Firefox", "brave": "Brave Browser", "notion": "Notion",
+    "word": "Microsoft Word", "excel": "Microsoft Excel",
+    "powerpoint": "Microsoft PowerPoint", "outlook": "Microsoft Outlook",
+    "settings": "System Settings", "system settings": "System Settings",
+    **{m: "Visual Studio Code" for m in _VSCODE_MISHEARS},
+    **{m: "WhatsApp" for m in _WHATSAPP_MISHEARS},
 }
 _LINUX_ALIASES = {
     "browser": "firefox", "the browser": "firefox", "chrome": "google-chrome",
     "google chrome": "google-chrome", "terminal": "gnome-terminal",
     "files": "nautilus", "file manager": "nautilus", "text editor": "gedit",
-    "vs code": "code", "vscode": "code", "spotify": "spotify",
+    "spotify": "spotify", "slack": "slack", "discord": "discord",
+    "telegram": "telegram-desktop", "zoom": "zoom", "firefox": "firefox",
+    "edge": "microsoft-edge", "brave": "brave-browser",
+    **{m: "code" for m in _VSCODE_MISHEARS},
+    **{m: "whatsapp-for-linux" for m in _WHATSAPP_MISHEARS},
 }
 _WINDOWS_ALIASES = {
     "browser": "msedge", "the browser": "msedge", "chrome": "chrome",
     "google chrome": "chrome", "terminal": "wt", "notepad": "notepad",
     "text editor": "notepad", "explorer": "explorer", "files": "explorer",
-    "vs code": "code", "vscode": "code", "mail": "outlook",
+    "mail": "outlook", "slack": "slack", "discord": "discord",
+    "telegram": "telegram", "zoom": "zoom", "teams": "ms-teams",
+    "edge": "msedge", "brave": "brave", "firefox": "firefox",
+    "word": "winword", "excel": "excel", "powerpoint": "powerpnt",
+    "outlook": "outlook",
+    **{m: "code" for m in _VSCODE_MISHEARS},
+    **{m: "whatsapp" for m in _WHATSAPP_MISHEARS},
 }
 
 if sys.platform == "darwin":
@@ -84,8 +106,123 @@ class ActionResult:
     speak: str = ""   # short spoken confirmation
 
 
+# ─────────────────── installed-app discovery ──────────────────────
+#
+# Whisper mangles app names ("open whatsapp" → "open bots app"), so unknown
+# names are fuzzy-matched against what is actually installed on this machine.
+# Each entry is (display_name, launch_target): the launch target is what the
+# OS launcher needs — app name (macOS), .desktop id (Linux), .lnk path
+# (Windows).
+
+_APP_FUZZY_THRESHOLD = 0.78
+_installed_cache: "list[tuple[str, str]] | None" = None
+
+
+def _mac_installed() -> list[tuple[str, str]]:
+    apps = []
+    roots = ("/Applications", "/Applications/Utilities",
+             "/System/Applications", "/System/Applications/Utilities",
+             os.path.expanduser("~/Applications"))
+    for root in roots:
+        try:
+            entries = os.listdir(root)
+        except OSError:
+            continue
+        for entry in entries:
+            if entry.endswith(".app"):
+                name = entry[:-4]
+                apps.append((name, name))
+    return apps
+
+
+def _linux_installed() -> list[tuple[str, str]]:
+    apps = []
+    roots = ("/usr/share/applications", "/usr/local/share/applications",
+             os.path.expanduser("~/.local/share/applications"))
+    for root in roots:
+        try:
+            entries = os.listdir(root)
+        except OSError:
+            continue
+        for entry in entries:
+            if not entry.endswith(".desktop"):
+                continue
+            name = None
+            try:
+                with open(os.path.join(root, entry), encoding="utf-8",
+                          errors="ignore") as fh:
+                    for line in fh:
+                        if line.startswith("Name="):
+                            name = line[5:].strip()
+                            break
+            except OSError:
+                continue
+            if name:
+                apps.append((name, entry[:-8]))  # gtk-launch <desktop-id>
+    return apps
+
+
+def _windows_installed() -> list[tuple[str, str]]:
+    apps = []
+    roots = (
+        os.path.join(os.environ.get("PROGRAMDATA", r"C:\ProgramData"),
+                     r"Microsoft\Windows\Start Menu\Programs"),
+        os.path.join(os.environ.get("APPDATA", ""),
+                     r"Microsoft\Windows\Start Menu\Programs"),
+    )
+    for root in roots:
+        for dirpath, _dirs, files in os.walk(root):
+            for f in files:
+                if f.lower().endswith(".lnk"):
+                    apps.append((f[:-4], os.path.join(dirpath, f)))
+    return apps
+
+
+def _installed_apps() -> list[tuple[str, str]]:
+    global _installed_cache
+    if _installed_cache is None:
+        try:
+            if sys.platform == "darwin":
+                _installed_cache = _mac_installed()
+            elif sys.platform == "win32":
+                _installed_cache = _windows_installed()
+            else:
+                _installed_cache = _linux_installed()
+        except Exception:
+            _installed_cache = []
+    return _installed_cache
+
+
+def _normalize_app(name: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", name.lower())
+
+
+def _match_installed(spoken: str) -> str | None:
+    """Best installed app for a (possibly misheard) spoken name, or None."""
+    norm = _normalize_app(spoken)
+    if not norm:
+        return None
+    best, best_ratio = None, 0.0
+    for display, launch in _installed_apps():
+        dn = _normalize_app(display)
+        if not dn:
+            continue
+        if dn == norm:
+            return launch
+        ratio = difflib.SequenceMatcher(None, norm, dn).ratio()
+        if ratio > best_ratio:
+            best, best_ratio = launch, ratio
+    return best if best_ratio >= _APP_FUZZY_THRESHOLD else None
+
+
 def _resolve_app(name: str) -> str:
-    return APP_ALIASES.get(name.strip().lower(), name.strip().title())
+    spoken = name.strip().lower()
+    if spoken in APP_ALIASES:
+        return APP_ALIASES[spoken]
+    installed = _match_installed(spoken)
+    if installed is not None:
+        return installed
+    return name.strip().title()
 
 
 def parse(command: str) -> Intent | None:
@@ -195,7 +332,8 @@ def _open_app(app: str) -> bool:
         return _run(["open", "-a", app])
     if sys.platform == "win32":
         return _run(["powershell", "-NoProfile", "-Command", f"Start-Process '{app}'"])
-    # Linux: try the binary on $PATH, then a .desktop launch.
+    # Linux: try the binary on $PATH, then a .desktop launch (the resolver may
+    # hand us a real desktop-id from _linux_installed — try it verbatim first).
     for candidate in (app, app.lower().replace(" ", "-"), app.lower().replace(" ", "")):
         exe = shutil.which(candidate)
         if exe:
@@ -205,7 +343,9 @@ def _open_app(app: str) -> bool:
             except Exception:
                 return False
     if shutil.which("gtk-launch"):
-        return _run(["gtk-launch", app.lower().replace(" ", "-")])
+        for candidate in (app, app.lower().replace(" ", "-")):
+            if _run(["gtk-launch", candidate]):
+                return True
     return False
 
 

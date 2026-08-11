@@ -48,6 +48,37 @@ class TestParse:
         assert control.parse("take a screenshot.") == control.Intent("screenshot")
 
 
+class TestInstalledAppResolution:
+    @pytest.fixture(autouse=True)
+    def fake_installed(self, monkeypatch):
+        monkeypatch.setattr(control, "_installed_cache", [
+            ("WhatsApp", "WhatsApp"),
+            ("Visual Studio Code", "Visual Studio Code"),
+            ("Google Chrome", "Google Chrome"),
+        ])
+
+    def test_mishear_aliases_resolve(self):
+        # observed Whisper mishears must map to the real app
+        assert control.parse("open bots app") == control.Intent("open_app", "WhatsApp")
+        assert control.parse("open what's app") == control.Intent("open_app", "WhatsApp")
+        assert control.parse("open versus code") == control.Intent(
+            "open_app", "Visual Studio Code")
+
+    def test_fuzzy_match_against_installed(self):
+        # not in the alias table — close enough to an installed app
+        assert control.parse("open whazapp") == control.Intent("open_app", "WhatsApp")
+
+    def test_exact_installed_match_case_insensitive(self):
+        assert control._match_installed("google chrome") == "Google Chrome"
+
+    def test_below_threshold_falls_back_to_titlecase(self):
+        assert control.parse("open flurbextron") == control.Intent(
+            "open_app", "Flurbextron")
+
+    def test_empty_spoken_name_no_match(self):
+        assert control._match_installed("") is None
+
+
 class TestIsCompound:
     def test_two_control_clauses(self):
         assert control.is_compound("open safari and type hello world")
